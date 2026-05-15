@@ -124,8 +124,8 @@ SCENARIO_SETTINGS = (
 		SCENARIO_PARAGRAPH_NAVIGATION,
 		# Translators: Setting label for boundary feedback during paragraph navigation.
 		_("Paragraph navigation boundaries"),
-		TWO_MODE_OPTIONS,
-		BoundaryFeedbackMode.NVDA_AND_SOUND,
+		FOUR_MODE_OPTIONS,
+		BoundaryFeedbackMode.CURRENT_ITEM_AND_SOUND,
 	),
 	ScenarioSetting(
 		SCENARIO_EDITABLE_TEXT_CARET,

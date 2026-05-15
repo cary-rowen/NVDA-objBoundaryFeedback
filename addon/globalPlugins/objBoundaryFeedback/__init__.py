@@ -97,6 +97,7 @@ _EditableTextCaretMovementScript = Callable[
 	None,
 ]
 _ParagraphMovementFunction = Callable[[bool, bool, textInfos.TextInfo | None], tuple[bool, bool]]
+_ParagraphCurrentReporter = Callable[[textInfos.TextInfo], bool]
 
 
 def _hasExpectedFunctionSignature(func: Callable[..., Any], expected: tuple[str, ...]) -> bool:
@@ -323,6 +324,82 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				brailleHandler.message(brailleMessage)
 			except Exception:
 				log.debugWarning("Unable to braille navigator object for boundary feedback", exc_info=True)
+
+	def _getParagraphCurrentTextInfo(self, ti: textInfos.TextInfo | None) -> textInfos.TextInfo | None:
+		if ti is not None:
+			try:
+				return ti.copy()
+			except Exception:
+				return None
+		try:
+			return api.getFocusObject().makeTextInfo(textInfos.POSITION_CARET)
+		except Exception:
+			return None
+
+	def _speakParagraphTextInfo(self, info: textInfos.TextInfo, unit: _TextUnit) -> bool:
+		if self._isObjectBelowLockScreen(info.obj):
+			ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
+			return True
+		try:
+			speech.speakTextInfo(info, unit=unit, reason=controlTypes.OutputReason.CARET)
+		except Exception:
+			log.debugWarning("Unable to report current paragraph item for boundary feedback", exc_info=True)
+			return False
+		return True
+
+	def _reportCurrentSingleLineParagraph(self, info: textInfos.TextInfo) -> bool:
+		lineInfo = info.copy()
+		lineInfo.expand(textInfos.UNIT_LINE)
+		return self._speakParagraphTextInfo(lineInfo, textInfos.UNIT_LINE)
+
+	def _isBlankTextInfoLine(self, info: textInfos.TextInfo) -> bool:
+		lineInfo = info.copy()
+		lineInfo.expand(textInfos.UNIT_LINE)
+		return not lineInfo.text.strip()
+
+	def _getCurrentMultiLineParagraphInfo(self, info: textInfos.TextInfo) -> textInfos.TextInfo:
+		firstLine = info.copy()
+		firstLine.expand(textInfos.UNIT_LINE)
+		if not firstLine.text.strip():
+			return firstLine
+
+		start = firstLine.copy()
+		start.collapse()
+		lineCount = 0
+		while lineCount < paragraphHelper.MAX_LINES:
+			previousLine = start.copy()
+			if not previousLine.move(textInfos.UNIT_LINE, -1):
+				break
+			if self._isBlankTextInfoLine(previousLine):
+				break
+			previousLine.expand(textInfos.UNIT_LINE)
+			previousLine.collapse()
+			start = previousLine
+			lineCount += 1
+
+		end = firstLine.copy()
+		while lineCount < paragraphHelper.MAX_LINES:
+			nextLine = end.copy()
+			nextLine.collapse(end=True)
+			if not nextLine.move(textInfos.UNIT_LINE, 1):
+				break
+			if self._isBlankTextInfoLine(nextLine):
+				break
+			nextLine.expand(textInfos.UNIT_LINE)
+			end = nextLine
+			lineCount += 1
+
+		paragraphInfo = start.copy()
+		paragraphInfo.setEndPoint(end, "endToEnd")
+		return paragraphInfo
+
+	def _reportCurrentMultiLineParagraph(self, info: textInfos.TextInfo) -> bool:
+		try:
+			paragraphInfo = self._getCurrentMultiLineParagraphInfo(info)
+		except Exception:
+			log.debugWarning("Unable to prepare current paragraph for boundary feedback", exc_info=True)
+			return False
+		return self._speakParagraphTextInfo(paragraphInfo, textInfos.UNIT_PARAGRAPH)
 
 	def _callWithSuppressedFirstUiMessage(
 		self,
@@ -990,19 +1067,20 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._installMethodPatch(editableText.EditableText, "_caretMovementScriptHelper", replacement)
 
 	def _installParagraphHelperHooks(self) -> None:
-		for name in (
-			"moveToSingleLineBreakParagraph",
-			"moveToMultiLineBreakParagraph",
+		for name, currentItemReporter in (
+			("moveToSingleLineBreakParagraph", self._reportCurrentSingleLineParagraph),
+			("moveToMultiLineBreakParagraph", self._reportCurrentMultiLineParagraph),
 		):
 			original = getattr(paragraphHelper, name)
 			if not _hasExpectedFunctionSignature(original, ("nextParagraph", "speakNew", "ti")):
 				continue
-			replacement = self._makeParagraphMovementReplacement(original)
+			replacement = self._makeParagraphMovementReplacement(original, currentItemReporter)
 			self._installMethodPatch(paragraphHelper, name, replacement)
 
 	def _makeParagraphMovementReplacement(
 		self,
 		original: _ParagraphMovementFunction,
+		currentItemReporter: _ParagraphCurrentReporter,
 	) -> _ParagraphMovementFunction:
 		@functools.wraps(original)
 		def replacement(
@@ -1012,8 +1090,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		) -> tuple[bool, bool]:
 			direction = _NEXT if nextParagraph else _PREVIOUS
 			mode = addonConfig.getScenarioMode(addonConfig.SCENARIO_PARAGRAPH_NAVIGATION)
-			passKey, moved = original(nextParagraph, speakNew, ti)
+			reportsCurrentItem = addonConfig.modeReportsCurrentItem(mode)
+			if reportsCurrentItem:
+				reportInfo = self._getParagraphCurrentTextInfo(ti)
+				passKey, moved = self._callWithSuppressedFirstUiMessage(
+					original,
+					nextParagraph,
+					speakNew,
+					ti,
+				)
+			else:
+				reportInfo = None
+				passKey, moved = original(nextParagraph, speakNew, ti)
 			if not passKey and not moved:
+				if reportsCurrentItem and (reportInfo is None or not currentItemReporter(reportInfo)):
+					# Translators: Reported when paragraph navigation cannot find another paragraph.
+					ui.message(_("No next paragraph") if nextParagraph else _("No previous paragraph"))
 				if addonConfig.modePlaysSound(mode):
 					self._playBoundarySound(direction)
 			return passKey, moved
