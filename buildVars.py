@@ -33,13 +33,15 @@ addon_info = AddonInfo(
 	addon_version="0.1.0",
 	# Brief changelog for this version
 	# Translators: what's new content for the add-on version to be shown in the add-on store
-	addon_changelog=_("Initial development version."),
+	addon_changelog=_("""### 0.1.0
+
+Initial version."""),
 	# Author(s)
 	addon_author="Cary-rowen <manchen_0528@outlook.com>",
 	# URL for the add-on documentation support
-	addon_url=None,
+	addon_url="https://github.com/cary-rowen/NVDA-objBoundaryFeedback",
 	# URL for the add-on repository where the source code can be found
-	addon_sourceURL=None,
+	addon_sourceURL="https://github.com/cary-rowen/NVDA-objBoundaryFeedback",
 	# Documentation file name
 	addon_docFileName="readme.html",
 	# Minimum NVDA version supported (e.g. "2019.3.0", minor version is optional)
