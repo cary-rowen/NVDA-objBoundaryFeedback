@@ -1,12 +1,17 @@
+# A part of Object Boundary Feedback
+# Copyright (C) 2026 Cary-rowen <manchen_0528@outlook.com>
+# This file may be used under the terms of the GNU General Public License, version 2 or later.
+# For more details see: https://www.gnu.org/licenses/gpl-2.0.html
 # pyright: basic
 
 from __future__ import annotations
 
-from enum import IntEnum
+from enum import unique
 from typing import Any, NamedTuple, cast
 
 import addonHandler
 import config
+from utils.displayString import DisplayStringIntEnum
 
 
 addonHandler.initTranslation()
@@ -24,12 +29,28 @@ SCENARIO_PARAGRAPH_NAVIGATION = "paragraphNavigationBoundaries"
 SCENARIO_EDITABLE_TEXT_CARET = "editableTextCaretBoundaries"
 
 
-class BoundaryFeedbackMode(IntEnum):
+@unique
+class BoundaryFeedbackMode(DisplayStringIntEnum):
 	NVDA_DEFAULT = 0
 	CURRENT_ITEM = 1
 	CURRENT_ITEM_AND_SOUND = 2
 	NVDA_AND_SOUND = 3
 	SOUND_ONLY = 4
+
+	@property
+	def _displayStringLabels(self) -> dict[BoundaryFeedbackMode, str]:
+		return {
+			# Translators: Setting option to keep NVDA's normal boundary feedback unchanged.
+			BoundaryFeedbackMode.NVDA_DEFAULT: _("NVDA default"),
+			# Translators: Setting option to report the current item instead of NVDA's boundary message.
+			BoundaryFeedbackMode.CURRENT_ITEM: _("Current item"),
+			# Translators: Setting option to report the current item and play a boundary sound.
+			BoundaryFeedbackMode.CURRENT_ITEM_AND_SOUND: _("Current item and sound"),
+			# Translators: Setting option to keep NVDA's boundary message and also play a sound.
+			BoundaryFeedbackMode.NVDA_AND_SOUND: _("NVDA default and sound"),
+			# Translators: Setting option to play only a sound at the boundary.
+			BoundaryFeedbackMode.SOUND_ONLY: _("Sound only"),
+		}
 
 
 class ScenarioSetting(NamedTuple):
@@ -56,60 +77,59 @@ THREE_MODE_OPTIONS = (
 )
 
 
-MODE_LABELS = {
-	BoundaryFeedbackMode.NVDA_DEFAULT: _("NVDA default"),
-	BoundaryFeedbackMode.CURRENT_ITEM: _("Current item"),
-	BoundaryFeedbackMode.CURRENT_ITEM_AND_SOUND: _("Current item and sound"),
-	BoundaryFeedbackMode.NVDA_AND_SOUND: _("NVDA default and sound"),
-	BoundaryFeedbackMode.SOUND_ONLY: _("Sound only"),
-}
-
-
 SCENARIO_SETTINGS = (
 	ScenarioSetting(
 		SCENARIO_REVIEW_MODE,
+		# Translators: Setting label for boundary feedback when switching review modes.
 		_("Review mode boundaries"),
 		FOUR_MODE_OPTIONS,
 		BoundaryFeedbackMode.CURRENT_ITEM_AND_SOUND,
 	),
 	ScenarioSetting(
 		SCENARIO_OBJECT_NAVIGATION,
+		# Translators: Setting label for boundary feedback during object navigation.
 		_("Object navigation boundaries"),
 		FOUR_MODE_OPTIONS,
 		BoundaryFeedbackMode.CURRENT_ITEM_AND_SOUND,
 	),
 	ScenarioSetting(
 		SCENARIO_REVIEW_CURSOR,
+		# Translators: Setting label for boundary feedback when moving the review cursor.
 		_("Review cursor boundaries"),
 		FOUR_MODE_OPTIONS,
 		BoundaryFeedbackMode.CURRENT_ITEM_AND_SOUND,
 	),
 	ScenarioSetting(
 		SCENARIO_BROWSE_MODE_QUICK_NAV,
+		# Translators: Setting label for boundary feedback in browse mode quick navigation.
 		_("Browse mode quick navigation boundaries"),
 		THREE_MODE_OPTIONS,
 		BoundaryFeedbackMode.NVDA_AND_SOUND,
 	),
 	ScenarioSetting(
 		SCENARIO_BROWSE_MODE_CONTAINER_END,
+		# Translators: Setting label for boundary feedback when moving past the end of a browse mode container.
 		_("Browse mode container end boundary"),
 		FOUR_MODE_OPTIONS,
 		BoundaryFeedbackMode.CURRENT_ITEM_AND_SOUND,
 	),
 	ScenarioSetting(
 		SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR,
+		# Translators: Setting label for boundary feedback when browse mode virtual cursor movement fails.
 		_("Browse mode virtual cursor movement boundaries"),
 		TWO_MODE_OPTIONS,
 		BoundaryFeedbackMode.NVDA_AND_SOUND,
 	),
 	ScenarioSetting(
 		SCENARIO_PARAGRAPH_NAVIGATION,
+		# Translators: Setting label for boundary feedback during paragraph navigation.
 		_("Paragraph navigation boundaries"),
-		FOUR_MODE_OPTIONS,
-		BoundaryFeedbackMode.CURRENT_ITEM_AND_SOUND,
+		TWO_MODE_OPTIONS,
+		BoundaryFeedbackMode.NVDA_AND_SOUND,
 	),
 	ScenarioSetting(
 		SCENARIO_EDITABLE_TEXT_CARET,
+		# Translators: Setting label for boundary feedback when editable text caret movement fails.
 		_("Editable text caret boundaries"),
 		TWO_MODE_OPTIONS,
 		BoundaryFeedbackMode.NVDA_AND_SOUND,

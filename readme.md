@@ -26,7 +26,8 @@ failure signal.
 
 ## Settings
 
-Most covered scenarios can be set to one of four feedback modes:
+Review mode, object navigation, review cursor, and browse mode container
+boundaries can be set to one of four feedback modes:
 
 * NVDA default.
 * Current item.
@@ -36,5 +37,5 @@ Most covered scenarios can be set to one of four feedback modes:
 Browse mode quick navigation uses three modes: NVDA default, sound only, or NVDA
 default and sound.
 
-Browse mode virtual cursor movement and editable text caret movement use two
-modes: NVDA default, or NVDA default and sound.
+Browse mode virtual cursor movement, paragraph navigation, and editable text
+caret movement use two modes: NVDA default, or NVDA default and sound.

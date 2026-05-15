@@ -35,7 +35,7 @@ addon_info = AddonInfo(
 	# Translators: what's new content for the add-on version to be shown in the add-on store
 	addon_changelog=_("Initial development version."),
 	# Author(s)
-	addon_author="cary-rowen <manchen_0528@outlook.com>",
+	addon_author="Cary-rowen <manchen_0528@outlook.com>",
 	# URL for the add-on documentation support
 	addon_url=None,
 	# URL for the add-on repository where the source code can be found
@@ -71,7 +71,12 @@ pythonSources: list[str] = [
 ]
 
 # Files that contain strings for translation. Usually your python sources
-i18nSources: list[str] = pythonSources + ["buildVars.py"]
+# Keep this explicit so gettext does not scan packaged binary resources such as sounds.
+i18nSources: list[str] = [
+	"addon/globalPlugins/*.py",
+	"addon/globalPlugins/objBoundaryFeedback/*.py",
+	"buildVars.py",
+]
 
 # Files that will be ignored when building the nvda-addon file
 # Paths are relative to the addon directory, not to the root directory of your addon sources.

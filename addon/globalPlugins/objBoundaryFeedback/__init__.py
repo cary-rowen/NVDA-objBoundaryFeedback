@@ -1,3 +1,7 @@
+# A part of Object Boundary Feedback
+# Copyright (C) 2026 Cary-rowen <manchen_0528@outlook.com>
+# This file may be used under the terms of the GNU General Public License, version 2 or later.
+# For more details see: https://www.gnu.org/licenses/gpl-2.0.html
 # pyright: basic
 
 from __future__ import annotations
@@ -6,7 +10,7 @@ import functools
 import inspect
 import os
 from collections.abc import Callable, Iterable
-from typing import Any, cast
+from typing import Any, Literal, TypeVar, cast
 
 import addonHandler
 import api
@@ -21,6 +25,7 @@ import globalVars
 import globalCommands
 import globalPluginHandler
 import gui
+import inputCore
 from logHandler import log
 from NVDAObjects import NVDAObject
 import nvwave
@@ -41,16 +46,11 @@ addonHandler.initTranslation()
 _PREVIOUS = "previous"
 _NEXT = "next"
 _GENERIC = "generic"
-
-_BoundaryFeedbackMode = addonConfig.BoundaryFeedbackMode
-_SCENARIO_REVIEW_MODE = addonConfig.SCENARIO_REVIEW_MODE
-_SCENARIO_OBJECT_NAVIGATION = addonConfig.SCENARIO_OBJECT_NAVIGATION
-_SCENARIO_REVIEW_CURSOR = addonConfig.SCENARIO_REVIEW_CURSOR
-_SCENARIO_BROWSE_MODE_QUICK_NAV = addonConfig.SCENARIO_BROWSE_MODE_QUICK_NAV
-_SCENARIO_BROWSE_MODE_CONTAINER_END = addonConfig.SCENARIO_BROWSE_MODE_CONTAINER_END
-_SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR = addonConfig.SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR
-_SCENARIO_PARAGRAPH_NAVIGATION = addonConfig.SCENARIO_PARAGRAPH_NAVIGATION
-_SCENARIO_EDITABLE_TEXT_CARET = addonConfig.SCENARIO_EDITABLE_TEXT_CARET
+_BoundaryDirection = Literal["previous", "next", "generic"]
+_BrowseDirection = Literal["previous", "next"]
+_TextPosition = str
+_TextUnit = str
+_CallResultT = TypeVar("_CallResultT")
 
 _WAVE_FILE_BY_DIRECTION = {
 	_PREVIOUS: "boundaryPrevious.wav",
@@ -60,23 +60,43 @@ _WAVE_FILE_BY_DIRECTION = {
 
 _ADDON_DIR = os.path.dirname(__file__)
 
-_MethodPatch = tuple[Any, str, Callable[..., Any]]
+_MethodPatch = tuple[object, str, Callable[..., Any]]
 _GestureMapReplacement = tuple[Callable[[], Iterable[Any]], Callable[..., Any], Callable[..., Any]]
 _CurrentItemReporter = Callable[[], None]
-_ParagraphSpeaker = Callable[[textInfos.TextInfo], None]
-_ParagraphStartFinder = Callable[[textInfos.TextInfo], textInfos.TextInfo]
-
-
-def _installConfigSpec() -> None:
-	addonConfig.installConfigSpec()
-
-
-def _getScenarioMode(key: str) -> _BoundaryFeedbackMode:
-	return addonConfig.getScenarioMode(key)
-
-
-def _getConfigValue(section: str, key: str) -> Any:
-	return cast(Any, config.conf)[section][key]
+_QuickNavScript = Callable[
+	[
+		browseMode.BrowseModeTreeInterceptor,
+		inputCore.InputGesture | None,
+		str,
+		_BrowseDirection,
+		str,
+		_TextUnit | None,
+	],
+	None,
+]
+_MovePastEndOfContainerScript = Callable[
+	[browseMode.BrowseModeDocumentTreeInterceptor, inputCore.InputGesture],
+	None,
+]
+_CursorManagerCaretMovementScript = Callable[
+	[
+		cursorManager.CursorManager,
+		inputCore.InputGesture,
+		_TextUnit,
+		int | None,
+		_TextPosition,
+		_TextUnit | None,
+		bool,
+		bool,
+		bool,
+	],
+	None,
+]
+_EditableTextCaretMovementScript = Callable[
+	[editableText.EditableText, inputCore.InputGesture, _TextUnit],
+	None,
+]
+_ParagraphMovementFunction = Callable[[bool, bool, textInfos.TextInfo | None], tuple[bool, bool]]
 
 
 def _hasExpectedFunctionSignature(func: Callable[..., Any], expected: tuple[str, ...]) -> bool:
@@ -112,7 +132,7 @@ def _getSelectionRange(obj: cursorManager.CursorManager) -> textInfos.TextInfo |
 		return None
 
 
-def _isComboBoxOrDescendant(obj: Any) -> bool:
+def _isComboBoxOrDescendant(obj: object | None) -> bool:
 	for _ in range(3):
 		if obj is None:
 			return False
@@ -129,7 +149,10 @@ def _isComboBoxOrDescendant(obj: Any) -> bool:
 	return False
 
 
-def _directionFromEnclosingUnitBoundary(info: textInfos.TextInfo, unit: str) -> str | None:
+def _directionFromEnclosingUnitBoundary(
+	info: textInfos.TextInfo,
+	unit: _TextUnit,
+) -> _BoundaryDirection | None:
 	try:
 		collapsedInfo = info.copy()
 		collapsedInfo.collapse()
@@ -145,7 +168,7 @@ def _directionFromEnclosingUnitBoundary(info: textInfos.TextInfo, unit: str) -> 
 	return _PREVIOUS if atStart else _NEXT
 
 
-def _directionFromTextBoundary(info: textInfos.TextInfo, unit: str) -> str | None:
+def _directionFromTextBoundary(info: textInfos.TextInfo, unit: _TextUnit) -> _BoundaryDirection | None:
 	if unit == textInfos.UNIT_CHARACTER:
 		lineBoundaryDirection = _directionFromEnclosingUnitBoundary(info, textInfos.UNIT_LINE)
 		if lineBoundaryDirection is not None:
@@ -163,18 +186,18 @@ def _directionFromTextBoundary(info: textInfos.TextInfo, unit: str) -> str | Non
 	return _NEXT if canMovePrevious else _PREVIOUS
 
 
-def _directionFromBrowseDirection(direction: str) -> str:
+def _directionFromBrowseDirection(direction: _BrowseDirection) -> _BoundaryDirection:
 	if direction == "previous":
 		return _PREVIOUS
 	return _NEXT
 
 
 def _directionFromCursorMovement(
-	direction: Any,
-	posConstant: Any,
-	posUnit: Any,
+	direction: int | None,
+	posConstant: _TextPosition,
+	posUnit: _TextUnit | None,
 	posUnitEnd: bool,
-) -> str:
+) -> _BoundaryDirection:
 	if direction is not None:
 		try:
 			if direction < 0:
@@ -195,7 +218,7 @@ def _directionFromCursorMovement(
 class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def __init__(self, *args: Any, **kwargs: Any) -> None:
 		super().__init__(*args, **kwargs)
-		_installConfigSpec()
+		addonConfig.installConfigSpec()
 		self._methodPatches: list[_MethodPatch] = []
 		self._gestureMapReplacements: list[_GestureMapReplacement] = []
 		self._settingsPanelRegistered = False
@@ -247,7 +270,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			pass
 		self._settingsPanelRegistered = False
 
-	def _playBoundarySound(self, direction: str) -> None:
+	def _playBoundarySound(self, direction: _BoundaryDirection) -> None:
 		fileName = _WAVE_FILE_BY_DIRECTION.get(direction, _WAVE_FILE_BY_DIRECTION[_GENERIC])
 		filePath = os.path.join(_ADDON_DIR, fileName)
 		try:
@@ -255,7 +278,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			log.debugWarning(f"Unable to play boundary feedback sound: {filePath}", exc_info=True)
 
-	def _isObjectBelowLockScreen(self, obj: Any) -> bool:
+	def _isObjectBelowLockScreen(self, obj: object) -> bool:
 		checker = getattr(globalCommands, "objectBelowLockScreenAndWindowsIsLocked", None)
 		if checker is None:
 			return False
@@ -284,103 +307,41 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		try:
 			speechSequence = speech.getObjectSpeech(curObject, reason=controlTypes.OutputReason.QUERY)
-			if speechSequence:
-				speech.speak(speechSequence)
-				brailleMessage = " ".join(item for item in speechSequence if isinstance(item, str))
-				brailleHandler = braille.handler
-				if brailleMessage and brailleHandler is not None:
-					brailleHandler.message(brailleMessage)
 		except Exception:
-			log.debugWarning("Unable to report current navigator object for boundary feedback", exc_info=True)
-			speech.speakObject(curObject, reason=controlTypes.OutputReason.QUERY)
-
-	def _getParagraphReportTextInfo(
-		self,
-		ti: textInfos.TextInfo | None,
-		findParagraphStart: _ParagraphStartFinder,
-	) -> textInfos.TextInfo | None:
-		if ti is not None:
+			log.debugWarning("Unable to get navigator object speech for boundary feedback", exc_info=True)
+			return
+		if not speechSequence:
+			return
+		try:
+			speech.speak(speechSequence)
+		except Exception:
+			log.debugWarning("Unable to speak navigator object for boundary feedback", exc_info=True)
+		brailleMessage = " ".join(item for item in speechSequence if isinstance(item, str))
+		brailleHandler = braille.handler
+		if brailleMessage and brailleHandler is not None:
 			try:
-				return findParagraphStart(ti)
+				brailleHandler.message(brailleMessage)
 			except Exception:
-				log.debugWarning("Unable to prepare paragraph text info for boundary feedback", exc_info=True)
-				return None
-		try:
-			return findParagraphStart(api.getFocusObject().makeTextInfo(textInfos.POSITION_CARET))
-		except Exception:
-			log.debugWarning("Unable to get caret paragraph text info for boundary feedback", exc_info=True)
-			return None
-
-	def _getSingleLineBreakParagraphStart(self, info: textInfos.TextInfo) -> textInfos.TextInfo:
-		reportInfo = info.copy()
-		reportInfo.expand(textInfos.UNIT_LINE)
-		reportInfo.collapse()
-		for _ in range(paragraphHelper.MAX_LINES):
-			previousInfo = reportInfo.copy()
-			if not previousInfo.move(textInfos.UNIT_LINE, -1):
-				break
-			previousLine = previousInfo.copy()
-			previousLine.expand(textInfos.UNIT_LINE)
-			if paragraphHelper._isLastLineOfParagraph(previousLine.text):
-				break
-			previousInfo.expand(textInfos.UNIT_LINE)
-			previousInfo.collapse()
-			reportInfo = previousInfo
-		return reportInfo
-
-	def _getMultiLineBreakParagraphStart(self, info: textInfos.TextInfo) -> textInfos.TextInfo:
-		reportInfo = info.copy()
-		reportInfo.expand(textInfos.UNIT_LINE)
-		if not reportInfo.text.strip():
-			reportInfo.collapse()
-			return reportInfo
-		reportInfo.collapse()
-		for _ in range(paragraphHelper.MAX_LINES):
-			previousInfo = reportInfo.copy()
-			if not previousInfo.move(textInfos.UNIT_LINE, -1):
-				break
-			previousLine = previousInfo.copy()
-			previousLine.expand(textInfos.UNIT_LINE)
-			if not previousLine.text.strip():
-				break
-			previousInfo.expand(textInfos.UNIT_LINE)
-			previousInfo.collapse()
-			reportInfo = previousInfo
-		return reportInfo
-
-	def _reportCurrentParagraph(
-		self,
-		info: textInfos.TextInfo,
-		paragraphSpeaker: _ParagraphSpeaker,
-	) -> bool:
-		if self._isObjectBelowLockScreen(info.obj):
-			ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
-			return True
-		try:
-			paragraphSpeaker(info.copy())
-		except Exception:
-			log.debugWarning("Unable to report current paragraph for boundary feedback", exc_info=True)
-			return False
-		return True
+				log.debugWarning("Unable to braille navigator object for boundary feedback", exc_info=True)
 
 	def _callWithSuppressedFirstUiMessage(
 		self,
-		func: Callable[..., Any],
+		func: Callable[..., _CallResultT],
 		*args: Any,
 		**kwargs: Any,
-	) -> Any:
+	) -> _CallResultT:
 		originalMessage = ui.message
 		originalReviewMessage = ui.reviewMessage
 		suppressedMessage = False
 
-		def replacementMessage(*messageArgs: Any, **messageKwargs: Any) -> Any:
+		def replacementMessage(*messageArgs: Any, **messageKwargs: Any) -> None:
 			nonlocal suppressedMessage
 			if not suppressedMessage:
 				suppressedMessage = True
 				return None
 			return originalMessage(*messageArgs, **messageKwargs)
 
-		def replacementReviewMessage(*messageArgs: Any, **messageKwargs: Any) -> Any:
+		def replacementReviewMessage(*messageArgs: Any, **messageKwargs: Any) -> None:
 			nonlocal suppressedMessage
 			if not suppressedMessage:
 				suppressedMessage = True
@@ -398,17 +359,17 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _callOriginalForDetectedBoundary(
 		self,
 		scenario: str,
-		direction: str,
-		original: Callable[..., Any],
+		direction: _BoundaryDirection,
+		original: Callable[..., _CallResultT],
 		*args: Any,
 		replaceNativeBoundaryMessage: bool = True,
 		currentItemReporter: _CurrentItemReporter | None = None,
 		**kwargs: Any,
-	) -> Any:
-		mode = _getScenarioMode(scenario)
-		if mode == _BoundaryFeedbackMode.NVDA_DEFAULT:
+	) -> _CallResultT:
+		mode = addonConfig.getScenarioMode(scenario)
+		if mode == addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT:
 			return original(*args, **kwargs)
-		if mode == _BoundaryFeedbackMode.SOUND_ONLY and replaceNativeBoundaryMessage:
+		if mode == addonConfig.BoundaryFeedbackMode.SOUND_ONLY and replaceNativeBoundaryMessage:
 			result = self._callWithSuppressedFirstUiMessage(
 				original,
 				*args,
@@ -432,8 +393,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			self._playBoundarySound(direction)
 		return result
 
-	def _playBoundarySoundForScenario(self, scenario: str, direction: str) -> None:
-		if addonConfig.modePlaysSound(_getScenarioMode(scenario)):
+	def _playBoundarySoundForScenario(self, scenario: str, direction: _BoundaryDirection) -> None:
+		if addonConfig.modePlaysSound(addonConfig.getScenarioMode(scenario)):
 			self._playBoundarySound(direction)
 
 	def _replaceGestureMapFunction(
@@ -476,7 +437,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self,
 		scenario: str,
 		name: str,
-		boundaryDetector: Callable[[], str | None],
+		boundaryDetector: Callable[[], _BoundaryDirection | None],
 		currentItemReporter: _CurrentItemReporter | None = None,
 	) -> None:
 		original = getattr(globalCommands.GlobalCommands, name, None)
@@ -487,8 +448,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 
 		@functools.wraps(original)
-		def replacement(commandObj, gesture):
-			if _getScenarioMode(scenario) == _BoundaryFeedbackMode.NVDA_DEFAULT:
+		def replacement(commandObj: globalCommands.GlobalCommands, gesture: inputCore.InputGesture) -> None:
+			if addonConfig.getScenarioMode(scenario) == addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT:
 				return original(commandObj, gesture)
 			direction = self._safeDetectBoundary(boundaryDetector)
 			if direction:
@@ -508,8 +469,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	def _safeDetectBoundary(
 		self,
-		boundaryDetector: Callable[[], str | None],
-	) -> str | None:
+		boundaryDetector: Callable[[], _BoundaryDirection | None],
+	) -> _BoundaryDirection | None:
 		try:
 			return boundaryDetector()
 		except Exception:
@@ -519,97 +480,97 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 	def _installGlobalCommandHooks(self) -> None:
 		for scenario, name, detector, currentItemReporter in (
 			(
-				_SCENARIO_REVIEW_MODE,
+				addonConfig.SCENARIO_REVIEW_MODE,
 				"script_reviewMode_next",
 				self._detectReviewModeNextBoundary,
 				self._reportCurrentReviewMode,
 			),
 			(
-				_SCENARIO_REVIEW_MODE,
+				addonConfig.SCENARIO_REVIEW_MODE,
 				"script_reviewMode_previous",
 				self._detectReviewModePreviousBoundary,
 				self._reportCurrentReviewMode,
 			),
 			(
-				_SCENARIO_OBJECT_NAVIGATION,
+				addonConfig.SCENARIO_OBJECT_NAVIGATION,
 				"script_navigatorObject_parent",
 				self._detectNavigatorParentBoundary,
 				self._reportCurrentNavigatorObject,
 			),
 			(
-				_SCENARIO_OBJECT_NAVIGATION,
+				addonConfig.SCENARIO_OBJECT_NAVIGATION,
 				"script_navigatorObject_next",
 				self._detectNavigatorNextBoundary,
 				self._reportCurrentNavigatorObject,
 			),
 			(
-				_SCENARIO_OBJECT_NAVIGATION,
+				addonConfig.SCENARIO_OBJECT_NAVIGATION,
 				"script_navigatorObject_previous",
 				self._detectNavigatorPreviousBoundary,
 				self._reportCurrentNavigatorObject,
 			),
 			(
-				_SCENARIO_OBJECT_NAVIGATION,
+				addonConfig.SCENARIO_OBJECT_NAVIGATION,
 				"script_navigatorObject_firstChild",
 				self._detectNavigatorFirstChildBoundary,
 				self._reportCurrentNavigatorObject,
 			),
 			(
-				_SCENARIO_OBJECT_NAVIGATION,
+				addonConfig.SCENARIO_OBJECT_NAVIGATION,
 				"script_navigatorObject_nextInFlow",
 				self._detectNavigatorNextInFlowBoundary,
 				self._reportCurrentNavigatorObject,
 			),
 			(
-				_SCENARIO_OBJECT_NAVIGATION,
+				addonConfig.SCENARIO_OBJECT_NAVIGATION,
 				"script_navigatorObject_previousInFlow",
 				self._detectNavigatorPreviousInFlowBoundary,
 				self._reportCurrentNavigatorObject,
 			),
 			(
-				_SCENARIO_REVIEW_CURSOR,
+				addonConfig.SCENARIO_REVIEW_CURSOR,
 				"script_review_previousLine",
 				self._detectReviewPreviousLineBoundary,
 				None,
 			),
 			(
-				_SCENARIO_REVIEW_CURSOR,
+				addonConfig.SCENARIO_REVIEW_CURSOR,
 				"script_review_nextLine",
 				self._detectReviewNextLineBoundary,
 				None,
 			),
 			(
-				_SCENARIO_REVIEW_CURSOR,
+				addonConfig.SCENARIO_REVIEW_CURSOR,
 				"script_review_previousPage",
 				self._detectReviewPreviousPageBoundary,
 				None,
 			),
 			(
-				_SCENARIO_REVIEW_CURSOR,
+				addonConfig.SCENARIO_REVIEW_CURSOR,
 				"script_review_nextPage",
 				self._detectReviewNextPageBoundary,
 				None,
 			),
 			(
-				_SCENARIO_REVIEW_CURSOR,
+				addonConfig.SCENARIO_REVIEW_CURSOR,
 				"script_review_previousWord",
 				self._detectReviewPreviousWordBoundary,
 				None,
 			),
 			(
-				_SCENARIO_REVIEW_CURSOR,
+				addonConfig.SCENARIO_REVIEW_CURSOR,
 				"script_review_nextWord",
 				self._detectReviewNextWordBoundary,
 				None,
 			),
 			(
-				_SCENARIO_REVIEW_CURSOR,
+				addonConfig.SCENARIO_REVIEW_CURSOR,
 				"script_review_previousCharacter",
 				self._detectReviewPreviousCharacterBoundary,
 				None,
 			),
 			(
-				_SCENARIO_REVIEW_CURSOR,
+				addonConfig.SCENARIO_REVIEW_CURSOR,
 				"script_review_nextCharacter",
 				self._detectReviewNextCharacterBoundary,
 				None,
@@ -617,10 +578,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		):
 			self._installGlobalCommandHook(scenario, name, detector, currentItemReporter)
 
-	def _detectReviewModeNextBoundary(self) -> str | None:
+	def _detectReviewModeNextBoundary(self) -> _BoundaryDirection | None:
 		return None if self._hasAvailableReviewMode(previous=False) else _NEXT
 
-	def _detectReviewModePreviousBoundary(self) -> str | None:
+	def _detectReviewModePreviousBoundary(self) -> _BoundaryDirection | None:
 		return None if self._hasAvailableReviewMode(previous=True) else _PREVIOUS
 
 	def _hasAvailableReviewMode(self, previous: bool) -> bool:
@@ -646,22 +607,23 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		curObject = api.getNavigatorObject()
 		if not isinstance(curObject, NVDAObject):
 			return False
-		attr = simpleAttr if bool(_getConfigValue("reviewCursor", "simpleReviewMode")) else fullAttr
+		reviewCursorConfig = cast(Any, config.conf["reviewCursor"])
+		attr = simpleAttr if bool(reviewCursorConfig["simpleReviewMode"]) else fullAttr
 		return getattr(curObject, attr) is None
 
-	def _detectNavigatorParentBoundary(self) -> str | None:
+	def _detectNavigatorParentBoundary(self) -> _BoundaryDirection | None:
 		return _PREVIOUS if self._isNavigatorRelationMissing("simpleParent", "parent") else None
 
-	def _detectNavigatorNextBoundary(self) -> str | None:
+	def _detectNavigatorNextBoundary(self) -> _BoundaryDirection | None:
 		return _NEXT if self._isNavigatorRelationMissing("simpleNext", "next") else None
 
-	def _detectNavigatorPreviousBoundary(self) -> str | None:
+	def _detectNavigatorPreviousBoundary(self) -> _BoundaryDirection | None:
 		return _PREVIOUS if self._isNavigatorRelationMissing("simplePrevious", "previous") else None
 
-	def _detectNavigatorFirstChildBoundary(self) -> str | None:
+	def _detectNavigatorFirstChildBoundary(self) -> _BoundaryDirection | None:
 		return _NEXT if self._isNavigatorRelationMissing("simpleFirstChild", "firstChild") else None
 
-	def _detectNavigatorNextInFlowBoundary(self) -> str | None:
+	def _detectNavigatorNextInFlowBoundary(self) -> _BoundaryDirection | None:
 		curObject = api.getNavigatorObject()
 		if not isinstance(curObject, NVDAObject):
 			return None
@@ -672,7 +634,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			parent = getattr(parent, "simpleParent")
 		return None if parent else _NEXT
 
-	def _detectNavigatorPreviousInFlowBoundary(self) -> str | None:
+	def _detectNavigatorPreviousInFlowBoundary(self) -> _BoundaryDirection | None:
 		curObject = api.getNavigatorObject()
 		if not isinstance(curObject, NVDAObject):
 			return None
@@ -680,13 +642,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			None if getattr(curObject, "simplePrevious") or getattr(curObject, "simpleParent") else _PREVIOUS
 		)
 
-	def _detectReviewPreviousLineBoundary(self) -> str | None:
+	def _detectReviewPreviousLineBoundary(self) -> _BoundaryDirection | None:
 		info = api.getReviewPosition().copy()
 		info.expand(textInfos.UNIT_LINE)
 		info.collapse()
 		return _PREVIOUS if info.move(textInfos.UNIT_LINE, -1) == 0 else None
 
-	def _detectReviewNextLineBoundary(self) -> str | None:
+	def _detectReviewNextLineBoundary(self) -> _BoundaryDirection | None:
 		origInfo = api.getReviewPosition().copy()
 		origInfo.collapse()
 		info = origInfo.copy()
@@ -695,7 +657,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		newLine.expand(textInfos.UNIT_LINE)
 		return _NEXT if res == 0 or newLine.start <= origInfo.start else None
 
-	def _detectReviewPreviousPageBoundary(self) -> str | None:
+	def _detectReviewPreviousPageBoundary(self) -> _BoundaryDirection | None:
 		info = api.getReviewPosition().copy()
 		try:
 			info.expand(textInfos.UNIT_PAGE)
@@ -705,7 +667,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return None
 		return _PREVIOUS if res == 0 else None
 
-	def _detectReviewNextPageBoundary(self) -> str | None:
+	def _detectReviewNextPageBoundary(self) -> _BoundaryDirection | None:
 		origInfo = api.getReviewPosition().copy()
 		origInfo.collapse()
 		info = origInfo.copy()
@@ -717,13 +679,13 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return None
 		return _NEXT if res == 0 or newPage.start <= origInfo.start else None
 
-	def _detectReviewPreviousWordBoundary(self) -> str | None:
+	def _detectReviewPreviousWordBoundary(self) -> _BoundaryDirection | None:
 		info = api.getReviewPosition().copy()
 		info.expand(textInfos.UNIT_WORD)
 		info.collapse()
 		return _PREVIOUS if info.move(textInfos.UNIT_WORD, -1) == 0 else None
 
-	def _detectReviewNextWordBoundary(self) -> str | None:
+	def _detectReviewNextWordBoundary(self) -> _BoundaryDirection | None:
 		origInfo = api.getReviewPosition().copy()
 		origInfo.collapse()
 		info = origInfo.copy()
@@ -732,7 +694,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		newWord.expand(textInfos.UNIT_WORD)
 		return _NEXT if res == 0 or newWord.start <= origInfo.start else None
 
-	def _detectReviewPreviousCharacterBoundary(self) -> str | None:
+	def _detectReviewPreviousCharacterBoundary(self) -> _BoundaryDirection | None:
 		lineInfo = api.getReviewPosition().copy()
 		lineInfo.expand(textInfos.UNIT_LINE)
 		charInfo = api.getReviewPosition().copy()
@@ -743,7 +705,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return _PREVIOUS
 		return None
 
-	def _detectReviewNextCharacterBoundary(self) -> str | None:
+	def _detectReviewNextCharacterBoundary(self) -> _BoundaryDirection | None:
 		lineInfo = api.getReviewPosition().copy()
 		lineInfo.expand(textInfos.UNIT_LINE)
 		charInfo = api.getReviewPosition().copy()
@@ -790,15 +752,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				),
 			)
 
-	def _makeQuickNavScriptReplacement(self, original):
+	def _makeQuickNavScriptReplacement(self, original: _QuickNavScript) -> _QuickNavScript:
 		@functools.wraps(original)
-		def replacement(treeInterceptor, gesture, itemType, direction, errorMessage, readUnit):
-			mode = _getScenarioMode(_SCENARIO_BROWSE_MODE_QUICK_NAV)
-			if mode == _BoundaryFeedbackMode.NVDA_DEFAULT:
+		def replacement(
+			treeInterceptor: browseMode.BrowseModeTreeInterceptor,
+			gesture: inputCore.InputGesture | None,
+			itemType: str,
+			direction: _BrowseDirection,
+			errorMessage: str,
+			readUnit: _TextUnit | None,
+		) -> None:
+			mode = addonConfig.getScenarioMode(addonConfig.SCENARIO_BROWSE_MODE_QUICK_NAV)
+			if mode == addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT:
 				return original(treeInterceptor, gesture, itemType, direction, errorMessage, readUnit)
 			result, hitBoundary = self._callQuickNavWithBoundaryMessageDetection(
 				errorMessage,
-				mode == _BoundaryFeedbackMode.SOUND_ONLY,
+				mode == addonConfig.BoundaryFeedbackMode.SOUND_ONLY,
 				original,
 				treeInterceptor,
 				gesture,
@@ -809,7 +778,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 			if hitBoundary:
 				self._playBoundarySoundForScenario(
-					_SCENARIO_BROWSE_MODE_QUICK_NAV,
+					addonConfig.SCENARIO_BROWSE_MODE_QUICK_NAV,
 					_directionFromBrowseDirection(direction),
 				)
 			return result
@@ -820,14 +789,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self,
 		errorMessage: str,
 		suppressBoundaryMessage: bool,
-		func: Callable[..., Any],
+		func: Callable[..., _CallResultT],
 		*args: Any,
 		**kwargs: Any,
-	) -> tuple[Any, bool]:
+	) -> tuple[_CallResultT, bool]:
 		originalMessage = ui.message
 		hitBoundary = False
 
-		def replacementMessage(text: str, *messageArgs: Any, **messageKwargs: Any) -> Any:
+		def replacementMessage(text: str, *messageArgs: Any, **messageKwargs: Any) -> None:
 			nonlocal hitBoundary
 			if text == errorMessage:
 				hitBoundary = True
@@ -841,15 +810,24 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		finally:
 			ui.message = originalMessage
 
-	def _makeMovePastEndOfContainerReplacement(self, original):
+	def _makeMovePastEndOfContainerReplacement(
+		self,
+		original: _MovePastEndOfContainerScript,
+	) -> _MovePastEndOfContainerScript:
 		@functools.wraps(original)
-		def replacement(treeInterceptor, gesture):
-			if _getScenarioMode(_SCENARIO_BROWSE_MODE_CONTAINER_END) == _BoundaryFeedbackMode.NVDA_DEFAULT:
+		def replacement(
+			treeInterceptor: browseMode.BrowseModeDocumentTreeInterceptor,
+			gesture: inputCore.InputGesture,
+		) -> None:
+			if (
+				addonConfig.getScenarioMode(addonConfig.SCENARIO_BROWSE_MODE_CONTAINER_END)
+				== addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT
+			):
 				return original(treeInterceptor, gesture)
 			hitBoundary = self._isMovePastEndOfContainerBoundary(treeInterceptor)
 			if hitBoundary:
 				return self._callOriginalForDetectedBoundary(
-					_SCENARIO_BROWSE_MODE_CONTAINER_END,
+					addonConfig.SCENARIO_BROWSE_MODE_CONTAINER_END,
 					_NEXT,
 					original,
 					treeInterceptor,
@@ -859,7 +837,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		return replacement
 
-	def _isMovePastEndOfContainerBoundary(self, treeInterceptor) -> bool:
+	def _isMovePastEndOfContainerBoundary(
+		self,
+		treeInterceptor: browseMode.BrowseModeDocumentTreeInterceptor,
+	) -> bool:
 		try:
 			info = treeInterceptor.makeTextInfo(textInfos.POSITION_CARET)
 			info.expand(textInfos.UNIT_CHARACTER)
@@ -880,12 +861,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			if isinstance(treeInterceptor, browseMode.BrowseModeTreeInterceptor)
 		)
 
-	def _replaceExistingBrowseModeGestureMaps(self, original, replacement) -> None:
+	def _replaceExistingBrowseModeGestureMaps(
+		self,
+		original: Callable[..., Any],
+		replacement: Callable[..., Any],
+	) -> None:
 		for treeInterceptor in self._getRunningBrowseModeTreeInterceptors():
 			self._replaceGestureMapFunction(treeInterceptor, original, replacement)
 
 	def _installCursorManagerHook(self) -> None:
-		original = cursorManager.CursorManager._caretMovementScriptHelper
+		original = cast(
+			_CursorManagerCaretMovementScript,
+			cursorManager.CursorManager._caretMovementScriptHelper,
+		)
 		expected = (
 			"self",
 			"gesture",
@@ -902,17 +890,20 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		@functools.wraps(original)
 		def replacement(
-			cursorManagerObj,
-			gesture,
-			unit,
-			direction=None,
-			posConstant=textInfos.POSITION_SELECTION,
-			posUnit=None,
-			posUnitEnd=False,
-			extraDetail=False,
-			handleSymbols=False,
-		):
-			if _getScenarioMode(_SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR) == _BoundaryFeedbackMode.NVDA_DEFAULT:
+			cursorManagerObj: cursorManager.CursorManager,
+			gesture: inputCore.InputGesture,
+			unit: _TextUnit,
+			direction: int | None = None,
+			posConstant: _TextPosition = textInfos.POSITION_SELECTION,
+			posUnit: _TextUnit | None = None,
+			posUnitEnd: bool = False,
+			extraDetail: bool = False,
+			handleSymbols: bool = False,
+		) -> None:
+			if (
+				addonConfig.getScenarioMode(addonConfig.SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR)
+				== addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT
+			):
 				return original(
 					cursorManagerObj,
 					gesture,
@@ -952,20 +943,30 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			after = _getSelectionRange(cursorManagerObj)
 			if before is not None and after is not None and _sameTextRange(before, after):
 				self._playBoundarySoundForScenario(
-					_SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR,
+					addonConfig.SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR,
 					boundaryDirection,
 				)
 
 		self._installMethodPatch(cursorManager.CursorManager, "_caretMovementScriptHelper", replacement)
 
 	def _installEditableTextHook(self) -> None:
-		original = editableText.EditableText._caretMovementScriptHelper
+		original = cast(
+			_EditableTextCaretMovementScript,
+			editableText.EditableText._caretMovementScriptHelper,
+		)
 		if not _hasExpectedFunctionSignature(original, ("self", "gesture", "unit")):
 			return
 
 		@functools.wraps(original)
-		def replacement(editableTextObj, gesture, unit):
-			if _getScenarioMode(_SCENARIO_EDITABLE_TEXT_CARET) == _BoundaryFeedbackMode.NVDA_DEFAULT:
+		def replacement(
+			editableTextObj: editableText.EditableText,
+			gesture: inputCore.InputGesture,
+			unit: _TextUnit,
+		) -> None:
+			if (
+				addonConfig.getScenarioMode(addonConfig.SCENARIO_EDITABLE_TEXT_CARET)
+				== addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT
+			):
 				return original(editableTextObj, gesture, unit)
 			try:
 				before = editableTextObj.makeTextInfo(textInfos.POSITION_CARET).copy()
@@ -982,62 +983,37 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					return
 				boundaryDirection = _directionFromTextBoundary(after, unit)
 				if boundaryDirection is not None:
-					self._playBoundarySoundForScenario(_SCENARIO_EDITABLE_TEXT_CARET, boundaryDirection)
+					self._playBoundarySoundForScenario(
+						addonConfig.SCENARIO_EDITABLE_TEXT_CARET, boundaryDirection
+					)
 
 		self._installMethodPatch(editableText.EditableText, "_caretMovementScriptHelper", replacement)
 
 	def _installParagraphHelperHooks(self) -> None:
-		for name, paragraphSpeaker, findParagraphStart in (
-			(
-				"moveToSingleLineBreakParagraph",
-				paragraphHelper.speakSingleLineBreakParagraph,
-				self._getSingleLineBreakParagraphStart,
-			),
-			(
-				"moveToMultiLineBreakParagraph",
-				paragraphHelper.speakMultiLineBreakParagraph,
-				self._getMultiLineBreakParagraphStart,
-			),
+		for name in (
+			"moveToSingleLineBreakParagraph",
+			"moveToMultiLineBreakParagraph",
 		):
 			original = getattr(paragraphHelper, name)
 			if not _hasExpectedFunctionSignature(original, ("nextParagraph", "speakNew", "ti")):
 				continue
-			replacement = self._makeParagraphMovementReplacement(
-				original,
-				paragraphSpeaker,
-				findParagraphStart,
-			)
+			replacement = self._makeParagraphMovementReplacement(original)
 			self._installMethodPatch(paragraphHelper, name, replacement)
 
 	def _makeParagraphMovementReplacement(
 		self,
-		original: Callable[..., tuple[bool, bool]],
-		paragraphSpeaker: _ParagraphSpeaker,
-		findParagraphStart: _ParagraphStartFinder,
-	):
+		original: _ParagraphMovementFunction,
+	) -> _ParagraphMovementFunction:
 		@functools.wraps(original)
-		def replacement(nextParagraph: bool, speakNew: bool, ti: textInfos.TextInfo | None = None):
+		def replacement(
+			nextParagraph: bool,
+			speakNew: bool,
+			ti: textInfos.TextInfo | None = None,
+		) -> tuple[bool, bool]:
 			direction = _NEXT if nextParagraph else _PREVIOUS
-			mode = _getScenarioMode(_SCENARIO_PARAGRAPH_NAVIGATION)
-			reportInfo = (
-				self._getParagraphReportTextInfo(ti, findParagraphStart)
-				if addonConfig.modeReportsCurrentItem(mode)
-				else None
-			)
-			if reportInfo is not None:
-				result = self._callWithSuppressedFirstUiMessage(
-					original,
-					nextParagraph,
-					speakNew,
-					ti,
-				)
-				passKey, moved = result
-			else:
-				passKey, moved = original(nextParagraph, speakNew, ti)
+			mode = addonConfig.getScenarioMode(addonConfig.SCENARIO_PARAGRAPH_NAVIGATION)
+			passKey, moved = original(nextParagraph, speakNew, ti)
 			if not passKey and not moved:
-				if reportInfo is not None and not self._reportCurrentParagraph(reportInfo, paragraphSpeaker):
-					# Translators: Reported when paragraph navigation cannot find another paragraph.
-					ui.message(_("No next paragraph") if nextParagraph else _("No previous paragraph"))
 				if addonConfig.modePlaysSound(mode):
 					self._playBoundarySound(direction)
 			return passKey, moved
