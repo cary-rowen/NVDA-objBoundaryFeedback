@@ -265,7 +265,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 		try:
 			gui.settingsDialogs.NVDASettingsDialog.categoryClasses.remove(
-				settings.BoundaryFeedbackSettingsPanel
+				settings.BoundaryFeedbackSettingsPanel,
 			)
 		except ValueError:
 			pass
@@ -1061,7 +1061,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				boundaryDirection = _directionFromTextBoundary(after, unit)
 				if boundaryDirection is not None:
 					self._playBoundarySoundForScenario(
-						addonConfig.SCENARIO_EDITABLE_TEXT_CARET, boundaryDirection
+						addonConfig.SCENARIO_EDITABLE_TEXT_CARET,
+						boundaryDirection,
 					)
 
 		self._installMethodPatch(editableText.EditableText, "_caretMovementScriptHelper", replacement)
