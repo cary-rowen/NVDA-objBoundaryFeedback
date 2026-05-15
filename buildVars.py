@@ -1,7 +1,12 @@
 # Build customizations
 # Change this file instead of sconstruct or manifest files, whenever possible.
 
-from site_scons.site_tools.NVDATool.typings import AddonInfo, BrailleTables, SymbolDictionaries, SpeechDictionaries
+from site_scons.site_tools.NVDATool.typings import (
+	AddonInfo,
+	BrailleTables,
+	SymbolDictionaries,
+	SpeechDictionaries,
+)
 
 # Since some strings in `addon_info` are translatable,
 # we need to include them in the .po files.
@@ -59,7 +64,11 @@ addon_info = AddonInfo(
 # pythonSources = ["addon/globalPlugins/*.py"]
 # For more information on SCons Glob expressions please take a look at:
 # https://scons.org/doc/production/HTML/scons-user/apd.html
-pythonSources: list[str] = ["addon/globalPlugins/*.py", "addon/globalPlugins/*.wav"]
+pythonSources: list[str] = [
+	"addon/globalPlugins/*.py",
+	"addon/globalPlugins/objBoundaryFeedback/*.py",
+	"addon/globalPlugins/objBoundaryFeedback/*.wav",
+]
 
 # Files that contain strings for translation. Usually your python sources
 i18nSources: list[str] = pythonSources + ["buildVars.py"]
