@@ -22,6 +22,12 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v6
+    - name: Checkout NVDA source
+      uses: actions/checkout@v6
+      with:
+        repository: nvaccess/nvda
+        path: nvda
+        persist-credentials: false
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:

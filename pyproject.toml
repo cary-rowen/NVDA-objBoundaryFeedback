@@ -3,11 +3,11 @@ requires = ["setuptools~=80.9", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "addonTemplate"
+name = "objBoundaryFeedback"
 dynamic = ["version"]
-description = "NVDA add-on template"
+description = "NVDA add-on that plays short tones when common navigation reaches a boundary"
 maintainers = [
-	{name = "NV Access", email = "info@nvaccess.org"},
+	{name = "cary-rowen", email = "manchen_0528@outlook.com"},
 ]
 requires-python = ">=3.13,<3.14"
 classifiers = [
@@ -38,9 +38,6 @@ dependencies = [
 	"pre-commit==4.2.0",
 	"pyright[nodejs]==1.1.407",
 ]
-[project.urls]
-Repository = "https://github.com/nvaccess/addonTemplate"
-
 [tool.ruff]
 line-length = 110
 
@@ -110,7 +107,8 @@ exclude = [
 # Tell pyright where to load python code from
 extraPaths = [
 	"./addon",
-	"../nvda/source",
+	"./nvda/source",
+	"../../nvda/source",
 ]
 
 # General config
