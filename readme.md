@@ -11,18 +11,23 @@ Boundary Feedback.
 
 ## Covered scenarios
 
-* Review cursor boundaries by line, page, word, and character.
-* Object navigation boundaries for parent, next, previous, first child, next in
-  flow, and previous in flow.
-* Review mode next and previous boundaries.
-* Browse mode quick navigation when no matching element is found.
-* Browse mode virtual cursor movement when the selection does not move.
-* Paragraph navigation when NVDA's paragraph helpers report no movement.
-* Editable text caret movement when the caret does not move.
+* Review cursor movement by line, page, word, and character when it reaches the
+  top, bottom, left, or right boundary.
+* Object navigation when there is no containing object, no next object, no
+  previous object, or no objects inside.
+* Moving the navigator object to the next or previous object in a flattened view
+  of the object navigation hierarchy when there is no next or previous object.
+* Review mode switching when there is no next or previous review mode.
+* Browse mode single letter navigation when no matching previous or next element
+  is found.
+* Moving past the end of a browse mode container element, such as a list or
+  table, when this lands at the bottom of the document.
+* Paragraph navigation when there is no next or previous paragraph.
+* Browse mode virtual cursor movement or editable text caret movement when the
+  cursor cannot move past a boundary.
 
-The add-on intentionally does not cover ordinary application lists or file views
-where the application consumes navigation keys and NVDA receives no explicit
-failure signal.
+The add-on does not currently cover ordinary lists, combo boxes, tree views, or
+similar objects.
 
 ## Settings
 
