@@ -59,6 +59,8 @@ _WAVE_FILE_BY_DIRECTION = {
 }
 
 _ADDON_DIR = os.path.dirname(__file__)
+_VALUE_SNAPSHOT_ATTRS = ("value", "windowText")
+_VALUE_SNAPSHOT_OBJECT_DEPTH = 3
 
 _MethodPatch = tuple[object, str, Callable[..., Any]]
 _GestureMapReplacement = tuple[Callable[[], Iterable[Any]], Callable[..., Any], Callable[..., Any]]
@@ -133,21 +135,25 @@ def _getSelectionRange(obj: cursorManager.CursorManager) -> textInfos.TextInfo |
 		return None
 
 
-def _isComboBoxOrDescendant(obj: object | None) -> bool:
-	for _ in range(3):
+def _getEditableValueSnapshot(obj: object | None) -> tuple[tuple[int, str, str], ...]:
+	snapshot: list[tuple[int, str, str]] = []
+	for level in range(_VALUE_SNAPSHOT_OBJECT_DEPTH):
 		if obj is None:
-			return False
-		if (
-			getattr(obj, "role", None) == controlTypes.Role.COMBOBOX
-			or getattr(obj, "windowClassName", None) == "ComboBox"
-		):
-			return True
+			break
+		for attr in _VALUE_SNAPSHOT_ATTRS:
+			try:
+				value = getattr(obj, attr, None)
+			except Exception:
+				log.debugWarning("Unable to inspect editable value for boundary feedback", exc_info=True)
+				continue
+			if isinstance(value, str):
+				snapshot.append((level, attr, value))
 		try:
 			obj = getattr(obj, "parent", None)
 		except Exception:
-			log.debugWarning("Unable to inspect editable text parent for boundary feedback", exc_info=True)
-			return False
-	return False
+			log.debugWarning("Unable to inspect editable parent for boundary feedback", exc_info=True)
+			break
+	return tuple(snapshot)
 
 
 def _directionFromEnclosingUnitBoundary(
@@ -1078,13 +1084,15 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			except Exception:
 				original(editableTextObj, gesture, unit)
 				return
+			beforeValueSnapshot = _getEditableValueSnapshot(editableTextObj)
 			original(editableTextObj, gesture, unit)
+			afterValueSnapshot = _getEditableValueSnapshot(editableTextObj)
 			try:
 				after = editableTextObj.makeTextInfo(textInfos.POSITION_CARET).copy()
 			except Exception:
 				return
 			if _sameTextRange(before, after):
-				if unit == textInfos.UNIT_LINE and _isComboBoxOrDescendant(editableTextObj):
+				if beforeValueSnapshot != afterValueSnapshot:
 					return
 				boundaryDirection = _directionFromTextBoundary(after, unit)
 				if boundaryDirection is not None:
