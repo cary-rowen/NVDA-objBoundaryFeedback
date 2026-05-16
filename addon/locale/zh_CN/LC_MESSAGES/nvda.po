@@ -1,0 +1,128 @@
+# Simplified Chinese translation for objBoundaryFeedback.
+# Copyright (C) 2026 objBoundaryFeedback contributors
+# This file is distributed under the same license as the objBoundaryFeedback package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: objBoundaryFeedback 0.1.1\n"
+"Report-Msgid-Bugs-To: 'nvda-translations@groups.io'\n"
+"POT-Creation-Date: 2026-05-17 00:01+0800\n"
+"PO-Revision-Date: 2026-05-17 00:13+0800\n"
+"Last-Translator: Cary-rowen <cary-rowen@users.noreply.github.com>\n"
+"Language-Team: Chinese (Simplified) <zh_CN@li.org>\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#. Translators: Setting option to keep NVDA's normal boundary feedback unchanged.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:44
+msgid "NVDA default"
+msgstr "NVDA 默认"
+
+#. Translators: Setting option to report the current item instead of NVDA's boundary message.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:46
+msgid "Current item"
+msgstr "当前项目"
+
+#. Translators: Setting option to report the current item and play a boundary sound.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:48
+msgid "Current item and sound"
+msgstr "当前项目和提示音"
+
+#. Translators: Setting option to keep NVDA's boundary message and also play a sound.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:50
+msgid "NVDA default and sound"
+msgstr "NVDA 默认和提示音"
+
+#. Translators: Setting option to play only a sound at the boundary.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:52
+msgid "Sound only"
+msgstr "仅提示音"
+
+#. Translators: Setting label for boundary feedback when switching review modes.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:84
+msgid "Review mode boundaries"
+msgstr "查看模式边界"
+
+#. Translators: Setting label for boundary feedback during object navigation.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:91
+msgid "Object navigation boundaries"
+msgstr "对象导航边界"
+
+#. Translators: Setting label for boundary feedback when moving the review cursor.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:98
+msgid "Review cursor boundaries"
+msgstr "查看光标边界"
+
+#. Translators: Setting label for boundary feedback in browse mode quick navigation.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:105
+msgid "Browse mode quick navigation boundaries"
+msgstr "浏览模式单键导航边界"
+
+#. Translators: Setting label for boundary feedback when moving past the end of a browse mode container.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:112
+msgid "Browse mode container end boundary"
+msgstr "浏览模式容器末尾边界"
+
+#. Translators: Setting label for boundary feedback when browse mode virtual cursor movement fails.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:119
+msgid "Browse mode virtual cursor movement boundaries"
+msgstr "浏览模式虚拟光标移动边界"
+
+#. Translators: Setting label for boundary feedback during paragraph navigation.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:126
+msgid "Paragraph navigation boundaries"
+msgstr "段落导航边界"
+
+#. Translators: Setting label for boundary feedback when editable text caret movement fails.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:133
+msgid "Editable text caret boundaries"
+msgstr "可编辑文本光标边界"
+
+#. Translators: Title of the NVDA settings panel for this add-on.
+#. Add-on summary/title, usually the user visible name of the add-on
+#. Translators: Summary/title for this add-on
+#. to be shown on installation and add-on information found in add-on store
+#: addon\globalPlugins\objBoundaryFeedback\settings.py:22 buildVars.py:26
+msgid "Object Boundary Feedback"
+msgstr "对象边界反馈"
+
+#. Translators: Label for the group of boundary feedback settings.
+#: addon\globalPlugins\objBoundaryFeedback\settings.py:27
+msgid "Boundary feedback"
+msgstr "边界反馈"
+
+#. Translators: Reported when there is no current navigator object.
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:333
+msgid "No navigator object"
+msgstr "没有导航对象"
+
+#. Translators: Reported when paragraph navigation cannot find another paragraph.
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1145
+msgid "No next paragraph"
+msgstr "往下没有段落"
+
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1145
+msgid "No previous paragraph"
+msgstr "往上没有段落"
+
+#: buildVars.py:30
+msgid ""
+"Plays short tones when NVDA reaches common object, review cursor, browse "
+"mode, and text navigation boundaries."
+msgstr "当 NVDA 到达常见对象、查看光标、浏览模式和文本导航边界时播放短提示音。"
+
+#. Brief changelog for this version
+#. Translators: what's new content for the add-on version to be shown in the add-on store
+#: buildVars.py:36
+msgid ""
+"### 0.1.1\n"
+"\n"
+"Avoid playing boundary sounds at internal line starts and ends while "
+"preserving feedback at document boundaries."
+msgstr ""
+"### 0.1.1\n"
+"\n"
+"避免在内部行首和行尾播放边界提示音，同时保留文档边界反馈。"
