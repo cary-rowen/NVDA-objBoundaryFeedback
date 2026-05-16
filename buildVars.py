@@ -30,12 +30,12 @@ addon_info = AddonInfo(
 		"""Plays short tones when NVDA reaches common object, review cursor, browse mode, and text navigation boundaries.""",
 	),
 	# version
-	addon_version="0.1.0",
+	addon_version="0.1.1",
 	# Brief changelog for this version
 	# Translators: what's new content for the add-on version to be shown in the add-on store
-	addon_changelog=_("""### 0.1.0
+	addon_changelog=_("""### 0.1.1
 
-Initial version."""),
+Avoid playing boundary sounds at internal line starts and ends while preserving feedback at document boundaries."""),
 	# Author(s)
 	addon_author="Cary-rowen <manchen_0528@outlook.com>",
 	# URL for the add-on documentation support
