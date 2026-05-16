@@ -282,11 +282,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if settingsPanel in categoryClasses:
 			self._settingsPanelRegistered = True
 			return
-		advancedPanel = getattr(gui.settingsDialogs, "AdvancedPanel", None)
-		if advancedPanel in categoryClasses:
-			categoryClasses.insert(categoryClasses.index(advancedPanel), settingsPanel)
-		else:
-			categoryClasses.append(settingsPanel)
+		categoryClasses.append(settingsPanel)
 		self._settingsPanelRegistered = True
 
 	def _unregisterSettingsPanel(self) -> None:
