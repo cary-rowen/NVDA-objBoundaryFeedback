@@ -4,10 +4,10 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: objBoundaryFeedback 0.1.1\n"
+"Project-Id-Version: objBoundaryFeedback 0.2.0\n"
 "Report-Msgid-Bugs-To: 'nvda-translations@groups.io'\n"
-"POT-Creation-Date: 2026-05-17 00:01+0800\n"
-"PO-Revision-Date: 2026-05-17 00:13+0800\n"
+"POT-Creation-Date: 2026-05-17 00:50+0800\n"
+"PO-Revision-Date: 2026-05-17 00:50+0800\n"
 "Last-Translator: Cary-rowen <cary-rowen@users.noreply.github.com>\n"
 "Language-Team: Chinese (Simplified) <zh_CN@li.org>\n"
 "Language: zh_CN\n"
@@ -95,16 +95,16 @@ msgid "Boundary feedback"
 msgstr "边界反馈"
 
 #. Translators: Reported when there is no current navigator object.
-#: addon\globalPlugins\objBoundaryFeedback\__init__.py:333
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:329
 msgid "No navigator object"
 msgstr "没有导航对象"
 
 #. Translators: Reported when paragraph navigation cannot find another paragraph.
-#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1145
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1141
 msgid "No next paragraph"
 msgstr "往下没有段落"
 
-#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1145
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1141
 msgid "No previous paragraph"
 msgstr "往上没有段落"
 
@@ -118,11 +118,17 @@ msgstr "当 NVDA 到达常见对象、查看光标、浏览模式和文本导航
 #. Translators: what's new content for the add-on version to be shown in the add-on store
 #: buildVars.py:36
 msgid ""
-"### 0.1.1\n"
+"### 0.2.0\n"
 "\n"
-"Avoid playing boundary sounds at internal line starts and ends while "
-"preserving feedback at document boundaries."
+"- Treat editable value changes as movement to avoid false boundary sounds in "
+"numeric and editable controls.\n"
+"- Added Simplified Chinese translation for the interface and documentation.\n"
+"- Refined documentation wording for covered boundary scenarios.\n"
+"- Append the settings panel naturally to NVDA settings categories."
 msgstr ""
-"### 0.1.1\n"
+"### 0.2.0\n"
 "\n"
-"避免在内部行首和行尾播放边界提示音，同时保留文档边界反馈。"
+"- 将可编辑控件的值变化视为移动，避免在数字和可编辑控件中误播放边界提示音。\n"
+"- 添加界面和文档的简体中文翻译。\n"
+"- 优化覆盖场景的文档表述。\n"
+"- 将设置面板自然追加到 NVDA 设置类别。"
