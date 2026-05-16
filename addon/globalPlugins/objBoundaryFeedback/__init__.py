@@ -169,11 +169,34 @@ def _directionFromEnclosingUnitBoundary(
 	return _PREVIOUS if atStart else _NEXT
 
 
+def _lineBoundaryIsDocumentBoundary(
+	info: textInfos.TextInfo,
+	direction: _BoundaryDirection,
+) -> bool:
+	def canMovePastLineBoundary(previous: bool) -> bool:
+		lineInfo = info.copy()
+		lineInfo.expand(textInfos.UNIT_LINE)
+		lineInfo.collapse(end=not previous)
+		return lineInfo.move(textInfos.UNIT_LINE, -1 if previous else 1) != 0
+
+	try:
+		if direction == _PREVIOUS:
+			return not canMovePastLineBoundary(previous=True)
+		if direction == _NEXT:
+			return not canMovePastLineBoundary(previous=False)
+		return not (canMovePastLineBoundary(previous=True) and canMovePastLineBoundary(previous=False))
+	except Exception:
+		log.debugWarning("Unable to inspect line boundary for boundary feedback", exc_info=True)
+		return True
+
+
 def _directionFromTextBoundary(info: textInfos.TextInfo, unit: _TextUnit) -> _BoundaryDirection | None:
 	if unit == textInfos.UNIT_CHARACTER:
 		lineBoundaryDirection = _directionFromEnclosingUnitBoundary(info, textInfos.UNIT_LINE)
 		if lineBoundaryDirection is not None:
-			return lineBoundaryDirection
+			if _lineBoundaryIsDocumentBoundary(info, lineBoundaryDirection):
+				return lineBoundaryDirection
+			return None
 	try:
 		previousInfo = info.copy()
 		canMovePrevious = previousInfo.move(unit, -1) != 0
@@ -1019,6 +1042,11 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			)
 			after = _getSelectionRange(cursorManagerObj)
 			if before is not None and after is not None and _sameTextRange(before, after):
+				if posUnit == textInfos.UNIT_LINE and not _lineBoundaryIsDocumentBoundary(
+					after,
+					boundaryDirection,
+				):
+					return
 				self._playBoundarySoundForScenario(
 					addonConfig.SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR,
 					boundaryDirection,
