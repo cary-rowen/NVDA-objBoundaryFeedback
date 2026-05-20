@@ -30,15 +30,12 @@ addon_info = AddonInfo(
 		"""Plays short tones when NVDA reaches common object, review cursor, browse mode, and text navigation boundaries.""",
 	),
 	# version
-	addon_version="0.2.0",
+	addon_version="0.2.1",
 	# Brief changelog for this version
 	# Translators: what's new content for the add-on version to be shown in the add-on store
-	addon_changelog=_("""### 0.2.0
+	addon_changelog=_("""### 0.2.1
 
-- Treat editable value changes as movement to avoid false boundary sounds in numeric and editable controls.
-- Added Simplified Chinese translation for the interface and documentation.
-- Refined documentation wording for covered boundary scenarios.
-- Append the settings panel naturally to NVDA settings categories."""),
+Improve sound file."""),
 	# Author(s)
 	addon_author="Cary-rowen <manchen_0528@outlook.com>",
 	# URL for the add-on documentation support
