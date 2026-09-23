@@ -1,0 +1,67 @@
+name: Word boundary regressions on NVDA
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      UV_PYTHON_PREFERENCE: managed
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check out official NVDA 2026.2
+        uses: actions/checkout@v7
+        with:
+          repository: nvaccess/nvda
+          ref: f62c980589d1ac30babf68ad48177e9ad29a2e84
+          path: nvda
+          submodules: recursive
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+      - name: Ensure official C++ build components
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -latest -products '*' -property installationPath
+          $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $vsConfig = Join-Path $PWD 'nvda\.vsconfig'
+          $installer = Start-Process -FilePath $setup -ArgumentList @(
+            'modify', '--installPath', "`"$installPath`"",
+            '--config', "`"$vsConfig`"", '--quiet', '--norestart'
+          ) -PassThru -Wait -WindowStyle Hidden
+          if ($installer.ExitCode -notin @(0, 3010)) { exit $installer.ExitCode }
+      - name: Build official NVDA source and run its baseline tests
+        working-directory: nvda
+        shell: pwsh
+        run: |
+          uv sync --frozen --group unit-tests
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\scons.bat source -j 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\rununittests.bat
+          exit $LASTEXITCODE
+      - name: Test native Word paths and browse-mode compatibility
+        shell: pwsh
+        run: |
+          .\nvda\.venv\Scripts\python.exe tests/run_nvda_tests.py --nvda-root nvda --output test-results/native
+          exit $LASTEXITCODE
+      - name: Run official NVDA tests with the add-on enabled
+        shell: pwsh
+        run: |
+          .\nvda\.venv\Scripts\python.exe tests/run_nvda_tests.py --nvda-root nvda --output test-results/upstream --upstream
+          exit $LASTEXITCODE
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: word-boundary-regressions
+          path: |
+            test-results/
+            nvda/testOutput/unit/

@@ -11,3 +11,4 @@ nvda/
 .sconsign.dblite
 /[0-9]*.[0-9]*.[0-9]*.json
 *.egg-info
+test-results/
