@@ -12,15 +12,23 @@ jobs:
   native:
     runs-on: windows-2022
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nvda: '2026.1'
+            ref: ae21324abe670192364c6e025e21e3b20eb529bb
+          - nvda: '2026.2'
+            ref: f62c980589d1ac30babf68ad48177e9ad29a2e84
     env:
       UV_PYTHON_PREFERENCE: managed
     steps:
       - uses: actions/checkout@v7
-      - name: Check out official NVDA 2026.2
+      - name: Check out official NVDA ${{ matrix.nvda }}
         uses: actions/checkout@v7
         with:
           repository: nvaccess/nvda
-          ref: f62c980589d1ac30babf68ad48177e9ad29a2e84
+          ref: ${{ matrix.ref }}
           path: nvda
           submodules: recursive
           persist-credentials: false
@@ -61,7 +69,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: word-boundary-regressions
+          name: word-boundary-regressions-${{ matrix.nvda }}
           path: |
             test-results/
             nvda/testOutput/unit/

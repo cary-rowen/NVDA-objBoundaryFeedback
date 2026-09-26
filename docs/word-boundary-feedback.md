@@ -104,7 +104,53 @@ main module with the unchanged supporting add-on modules; `--test-pattern`
 selects test methods. The two review regressions fail against the original PR
 and pass against the revised module.
 
+## Real Word Robot tests
+
+`tests/run_system_tests.py` runs the packaged add-on in the official
+Robot remote-spy harness. It requires a built NVDA checkout with the
+`system-tests` dependency group and a locally installed Microsoft Word.
+It temporarily replaces the running NVDA; run it on an otherwise idle desktop
+without concurrent shell commands or keyboard/mouse input, and restore the
+regular NVDA afterwards. Tests create their own Word documents
+and an isolated NVDA profile. No existing user document is used as a fixture.
+
+```powershell
+$nvdaRoot = 'C:\path\to\nvda'
+$nvdaExe = 'C:\Program Files\NVDA\nvda.exe'
+try {
+    & "$nvdaRoot\.venv\Scripts\python.exe" tests/run_system_tests.py `
+        --nvda-root $nvdaRoot --output test-results/word --quick --installed `
+        --bundle objBoundaryFeedback-0.2.1-word-boundary-review2.nvda-addon
+} finally {
+    Start-Process -FilePath $nvdaExe -WindowStyle Hidden
+}
+```
+
+The short flow reuses one Word session per backend: two tests and 72
+sound-asserted key operations, covering single-line and multi-paragraph
+boundaries, successful movement, selection collapse and disabled feedback.
+Omit `--quick` for the full Word suite: 16 tests and 168 sound-asserted key
+operations, additionally covering empty documents, wrapped paragraphs,
+trailing blank paragraphs and manual line breaks. Neither flow uses test skips.
+
+The tests verify the actual Word provider class, focus mode, foreground window,
+NVDA focus window, COM selection before/after movement, and the real wave-file
+playback call. Playback still executes; caret movement and provider results are
+not mocked. The sound assertion observes the real playback call, not an acoustic
+recording. Both backends are required;
+failure to obtain either backend fails the test rather than skipping it.
+Window identity is checked using Word's
+[Window.Hwnd](https://learn.microsoft.com/en-us/office/vba/api/word.window.hwnd).
+
+`--installed` selects the installed NVDA executable, still with an isolated test
+profile. It does not install NVDA or change the user's normal configuration.
+Omit it to run the built source checkout instead. The spy uses explicit waits
+and exceptions because installed NVDA disables Python `assert` statements.
+This runner is confined to Word and does not modify official test assertions
+or provide adapters for unrelated applications. General NVDA desktop tests
+have their own [system-test instructions](https://github.com/nvaccess/nvda/blob/f62c980589d1ac30babf68ad48177e9ad29a2e84/tests/system/readme.md).
+
 See [validation results and manual checklist](word-boundary-validation.md) for
-the executed matrix, the upstream skip, and the remaining manual acceptance.
+the executed matrix and the user's manual acceptance.
 
 来自 GPT6Astra 驱动的 CODEX
