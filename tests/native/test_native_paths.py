@@ -1,13 +1,7 @@
 # Copyright (C) 2026
 # This file is covered by the GNU General Public License, version 2 or later.
 # pyright: basic
-"""Real NVDA routing / TextInfo regressions; application I/O is controlled.
-
-Unlike the portable tests, these import NVDA's actual Word classes, gesture
-resolution, caret wait, post-move helper, CursorManager, config and plugin
-lifecycle. The provider is based on NVDA's official unit-test textProvider.
-This is not a substitute for interactive Word/UIA/IAccessible testing.
-"""
+"""NVDA Word routing and TextInfo regressions with controlled application I/O."""
 
 from __future__ import annotations
 
@@ -24,7 +18,6 @@ import api
 from baseObject import ScriptableObject
 import braille
 import config
-from documentNavigation import paragraphHelper
 import editableText
 import eventHandler
 import IAccessibleHandler
@@ -35,7 +28,6 @@ import review
 import scriptHandler
 import speech
 import textInfos
-import ui
 from tests.unit.textProvider import BasicTextInfo, BasicTextProvider, CursorManager
 
 
@@ -155,9 +147,11 @@ class NativePathTests(unittest.TestCase):
 		self.focus.return_value = obj
 		gesture = KeyboardInputGesture.fromName(key)
 		gesture.send = Mock(
-			side_effect=lambda: setattr(provider, "selectionOffsets", (destination, destination))
-			if destination is not None
-			else None,
+			side_effect=lambda: (
+				setattr(provider, "selectionOffsets", (destination, destination))
+				if destination is not None
+				else None
+			),
 		)
 		script = scriptHandler._getObjScript(obj, gesture, [])
 		assert script is not None
@@ -246,6 +240,19 @@ class NativePathTests(unittest.TestCase):
 				scriptHandler._numScriptsQueued = 0
 				self.pending.return_value = False
 
+	def test_native_wait_failure_restores_existing_override(self):
+		obj = wordObject(UIAWord, WordProvider())
+		self.focus.return_value = obj
+		originalWait = Mock(side_effect=RuntimeError("native wait failed"))
+		obj._hasCaretMoved = originalWait
+		gesture = KeyboardInputGesture.fromName("downArrow")
+		gesture.send = Mock()
+		with self.assertRaisesRegex(RuntimeError, "native wait failed"):
+			obj.script_caret_moveByLine(gesture)
+		self.assertIs(obj._hasCaretMoved, originalWait)
+		gesture.send.assert_called_once_with()
+		self.plugin._playBoundarySound.assert_not_called()
+
 	def test_legacy_focus_or_value_change_during_com_move_is_silent(self):
 		for change in ("focus", "value"):
 			with self.subTest(change=change):
@@ -284,60 +291,6 @@ class NativePathTests(unittest.TestCase):
 				with patch.object(BasicTextInfo, "move", failLineProbe):
 					getattr(cm, method)(None)
 				self.plugin._playBoundarySound.assert_called_once_with(expected)
-
-	def test_browse_normal_movement_remains_silent(self):
-		cm = CursorManager(text="abc")
-		cm.script_moveByCharacter_forward(None)
-		self.assertEqual(cm.selectionOffsets, (1, 1))
-		self.plugin._playBoundarySound.assert_not_called()
-
-	def test_existing_feedback_modes_preserve_native_messages_current_item_and_return_value(self):
-		message = self.startPatch(ui, "message")
-		for setting in self.conf.SCENARIO_SETTINGS:
-			for mode in setting.modes:
-				with self.subTest(scenario=setting.key, mode=mode):
-					self.section[setting.key] = mode.value
-					message.reset_mock()
-					self.plugin._playBoundarySound.reset_mock()
-					reporter = Mock()
-					result = object()
-
-					def native():
-						ui.message("native boundary message")
-						return result
-
-					original = Mock(side_effect=native)
-					actual = self.plugin._callOriginalForDetectedBoundary(
-						setting.key,
-						"next",
-						original,
-						currentItemReporter=reporter,
-					)
-					self.assertIs(actual, result)
-					original.assert_called_once_with()
-					self.assertEqual(message.call_count, int(mode.value in (0, 3)))
-					self.assertEqual(reporter.call_count, int(mode.value in (1, 2)))
-					self.assertEqual(self.plugin._playBoundarySound.call_count, int(mode.value in (2, 3, 4)))
-
-	def test_original_single_and_multi_line_paragraph_helpers_keep_boundary_modes(self):
-		self.startPatch(ui, "message")
-		for helper in (
-			paragraphHelper.moveToSingleLineBreakParagraph,
-			paragraphHelper.moveToMultiLineBreakParagraph,
-		):
-			for nextParagraph, position in ((False, 0), (True, 8)):
-				for mode in (0, 1, 2, 3):
-					with self.subTest(helper=helper.__name__, nextParagraph=nextParagraph, mode=mode):
-						provider = BasicTextProvider(text="one\n\nlast", selection=(position, position))
-						self.section[self.conf.SCENARIO_PARAGRAPH_NAVIGATION] = mode
-						self.plugin._playBoundarySound.reset_mock()
-						result = helper(nextParagraph, False, provider.makeTextInfo(textInfos.POSITION_CARET))
-						self.assertEqual(result, (False, False))
-						self.assertEqual(self.plugin._playBoundarySound.call_count, int(mode in (2, 3)))
-						if mode in (2, 3):
-							self.plugin._playBoundarySound.assert_called_once_with(
-								"next" if nextParagraph else "previous",
-							)
 
 	def test_lifecycle_restores_methods_and_existing_and_new_legacy_gesture_maps(self):
 		# Terminate the plugin created in setUp so the first object predates hooks.

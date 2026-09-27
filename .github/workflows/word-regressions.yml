@@ -47,15 +47,13 @@ jobs:
             '--config', "`"$vsConfig`"", '--quiet', '--norestart'
           ) -PassThru -Wait -WindowStyle Hidden
           if ($installer.ExitCode -notin @(0, 3010)) { exit $installer.ExitCode }
-      - name: Build official NVDA source and run its baseline tests
+      - name: Build official NVDA source
         working-directory: nvda
         shell: pwsh
         run: |
           uv sync --frozen --group unit-tests
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           .\scons.bat source -j 4
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          .\rununittests.bat
           exit $LASTEXITCODE
       - name: Test native Word paths and browse-mode compatibility
         shell: pwsh

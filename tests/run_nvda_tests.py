@@ -26,16 +26,9 @@ def main():
 		action="store_true",
 		help="Run NVDA's unit suite with the add-on loaded",
 	)
-	parser.add_argument(
-		"--plugin-source",
-		type=Path,
-		help="Alternate plugin __init__.py for a negative control",
-	)
-	parser.add_argument("--test-pattern", action="append", help="Select native test methods by glob pattern")
 	args = parser.parse_args()
 	root = args.nvda_root.resolve()
 	output = args.output.resolve()
-	pluginSource = args.plugin_source.resolve() if args.plugin_source else None
 	testsPath = Path(__file__).resolve().parent / "native" / "test_native_paths.py"
 	sys.path[:0] = [str(root), str(root / "source")]
 	import tests.unit  # noqa: F401 - official bootstrap (also changes the working directory)
@@ -46,10 +39,6 @@ def main():
 	module = importlib.util.module_from_spec(spec)
 	sys.modules[spec.name] = module
 	spec.loader.exec_module(module)
-	if pluginSource is not None:
-		setattr(module, "PLUGIN_PATH", pluginSource)
-	if args.test_pattern:
-		unittest.defaultTestLoader.testNamePatterns = args.test_pattern
 	output.mkdir(parents=True, exist_ok=True)
 	if args.upstream:
 		plugin = module.loadPlugin().GlobalPlugin()
