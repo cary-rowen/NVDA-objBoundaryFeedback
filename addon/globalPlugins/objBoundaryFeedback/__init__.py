@@ -37,6 +37,7 @@ import review
 import scriptHandler
 import speech
 import textInfos
+import tones
 import treeInterceptorHandler
 import ui
 from utils.security import objectBelowLockScreenAndWindowsIsLocked
@@ -61,6 +62,11 @@ _WAVE_FILE_BY_DIRECTION = {
 	_PREVIOUS: "boundaryPrevious.wav",
 	_NEXT: "boundaryNext.wav",
 	_GENERIC: "boundaryGeneric.wav",
+}
+_BEEP_BY_DIRECTION = {
+	_PREVIOUS: (400, 40),
+	_NEXT: (200, 40),
+	_GENERIC: (300, 40),
 }
 
 _ADDON_DIR = os.path.dirname(__file__)
@@ -355,6 +361,16 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._settingsPanelRegistered = False
 
 	def _playBoundarySound(self, direction: _BoundaryDirection) -> None:
+		if addonConfig.getSoundOutput() == addonConfig.BoundarySoundOutput.BEEP:
+			frequency, length = _BEEP_BY_DIRECTION.get(direction, _BEEP_BY_DIRECTION[_GENERIC])
+			try:
+				tones.beep(frequency, length)
+			except Exception:
+				log.debugWarning(
+					f"Unable to play boundary feedback beep: {frequency} Hz for {length} ms",
+					exc_info=True,
+				)
+			return
 		fileName = _WAVE_FILE_BY_DIRECTION.get(direction, _WAVE_FILE_BY_DIRECTION[_GENERIC])
 		filePath = os.path.join(_ADDON_DIR, fileName)
 		try:

@@ -27,6 +27,7 @@ SCENARIO_BROWSE_MODE_CONTAINER_END = "browseModeContainerEndBoundary"
 SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR = "browseModeVirtualCursorMovementBoundaries"
 SCENARIO_PARAGRAPH_NAVIGATION = "paragraphNavigationBoundaries"
 SCENARIO_EDITABLE_TEXT_CARET = "editableTextCaretBoundaries"
+SOUND_OUTPUT = "soundOutput"
 
 
 @unique
@@ -50,6 +51,21 @@ class BoundaryFeedbackMode(DisplayStringIntEnum):
 			BoundaryFeedbackMode.NVDA_AND_SOUND: _("NVDA default and sound"),
 			# Translators: Setting option to play only a sound at the boundary.
 			BoundaryFeedbackMode.SOUND_ONLY: _("Sound only"),
+		}
+
+
+@unique
+class BoundarySoundOutput(DisplayStringIntEnum):
+	SOUND_FILE = 0
+	BEEP = 1
+
+	@property
+	def _displayStringLabels(self) -> dict[BoundarySoundOutput, str]:
+		return {
+			# Translators: Boundary feedback sound output option.
+			BoundarySoundOutput.SOUND_FILE: _("Sound file"),
+			# Translators: Boundary feedback sound output option.
+			BoundarySoundOutput.BEEP: _("Beep"),
 		}
 
 
@@ -140,8 +156,11 @@ SCENARIO_BY_KEY = {setting.key: setting for setting in SCENARIO_SETTINGS}
 MAX_MODE_VALUE = max(mode.value for mode in BoundaryFeedbackMode)
 
 confspec = {
-	setting.key: f"integer(0, {MAX_MODE_VALUE}, default={setting.default.value})"
-	for setting in SCENARIO_SETTINGS
+	SOUND_OUTPUT: f"integer(0, {max(output.value for output in BoundarySoundOutput)}, default={BoundarySoundOutput.SOUND_FILE.value})",
+	**{
+		setting.key: f"integer(0, {MAX_MODE_VALUE}, default={setting.default.value})"
+		for setting in SCENARIO_SETTINGS
+	},
 }
 
 
@@ -165,6 +184,13 @@ def getScenarioMode(key: str) -> BoundaryFeedbackMode:
 	except (KeyError, TypeError, ValueError):
 		return setting.default
 	return mode if mode in setting.modes else setting.default
+
+
+def getSoundOutput() -> BoundarySoundOutput:
+	try:
+		return BoundarySoundOutput(int(getAddonConfigSection()[SOUND_OUTPUT]))
+	except (KeyError, TypeError, ValueError):
+		return BoundarySoundOutput.SOUND_FILE
 
 
 def modePlaysSound(mode: BoundaryFeedbackMode) -> bool:

@@ -28,6 +28,17 @@ class BoundaryFeedbackSettingsPanel(SettingsPanel):
 		group = guiHelper.BoxSizerHelper(self, sizer=groupSizer)
 		settingsSizerHelper.addItem(group, flag=wx.EXPAND)
 
+		self._soundOutputOptions = tuple(addonConfig.BoundarySoundOutput)
+		self._soundOutputControl = group.addLabeledControl(
+			# Translators: Setting label for the boundary feedback sound output.
+			_("Boundary sound output:"),
+			wx.Choice,
+			choices=[output.displayString for output in self._soundOutputOptions],
+		)
+		self._soundOutputControl.SetSelection(
+			self._soundOutputOptions.index(addonConfig.getSoundOutput()),
+		)
+
 		self._controls: dict[str, wx.Choice] = {}
 		for setting in addonConfig.SCENARIO_SETTINGS:
 			choices = [mode.displayString for mode in setting.modes]
@@ -42,6 +53,9 @@ class BoundaryFeedbackSettingsPanel(SettingsPanel):
 
 	def onSave(self) -> None:
 		section = addonConfig.getAddonConfigSection()
+		section[addonConfig.SOUND_OUTPUT] = self._soundOutputOptions[
+			self._soundOutputControl.GetSelection()
+		].value
 		for setting in addonConfig.SCENARIO_SETTINGS:
 			selection = self._controls[setting.key].GetSelection()
 			section[setting.key] = setting.modes[selection].value
