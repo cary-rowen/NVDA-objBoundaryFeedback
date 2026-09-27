@@ -154,11 +154,7 @@ def getAddonConfigSection() -> Any:
 	conf = cast(Any, config.conf)
 	if CONF_SECTION not in conf:
 		conf[CONF_SECTION] = {}
-	section = conf[CONF_SECTION]
-	for setting in SCENARIO_SETTINGS:
-		if setting.key not in section:
-			section[setting.key] = setting.default.value
-	return section
+	return conf[CONF_SECTION]
 
 
 def getScenarioMode(key: str) -> BoundaryFeedbackMode:

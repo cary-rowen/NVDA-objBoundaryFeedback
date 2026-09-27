@@ -39,6 +39,7 @@ import speech
 import textInfos
 import treeInterceptorHandler
 import ui
+from utils.security import objectBelowLockScreenAndWindowsIsLocked
 
 from . import addonConfig
 from . import settings
@@ -278,12 +279,6 @@ def _callWithCaretMoveObservation(
 	return observedInfo
 
 
-def _directionFromBrowseDirection(direction: _BrowseDirection) -> _BoundaryDirection:
-	if direction == "previous":
-		return _PREVIOUS
-	return _NEXT
-
-
 def _directionFromCursorMovement(
 	direction: int | None,
 	posConstant: _TextPosition,
@@ -367,16 +362,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		except Exception:
 			log.debugWarning(f"Unable to play boundary feedback sound: {filePath}", exc_info=True)
 
-	def _isObjectBelowLockScreen(self, obj: object) -> bool:
-		checker = getattr(globalCommands, "objectBelowLockScreenAndWindowsIsLocked", None)
-		if checker is None:
-			return False
-		try:
-			return bool(checker(obj))
-		except Exception:
-			log.debugWarning("Unable to check lock screen state for boundary feedback", exc_info=True)
-			return False
-
 	def _reportCurrentReviewMode(self) -> None:
 		currentMode = review.getCurrentMode()
 		for modeId, label, _modeGetter in review.modes:
@@ -391,7 +376,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			# Translators: Reported when there is no current navigator object.
 			ui.reviewMessage(_("No navigator object"))
 			return
-		if self._isObjectBelowLockScreen(curObject):
+		if objectBelowLockScreenAndWindowsIsLocked(curObject):
 			ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
 			return
 		try:
@@ -425,7 +410,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return None
 
 	def _speakParagraphTextInfo(self, info: textInfos.TextInfo, unit: _TextUnit) -> bool:
-		if self._isObjectBelowLockScreen(info.obj):
+		if objectBelowLockScreenAndWindowsIsLocked(info.obj):
 			ui.reviewMessage(gui.blockAction.Context.WINDOWS_LOCKED.translatedMessage)
 			return True
 		try:
@@ -534,26 +519,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		mode = addonConfig.getScenarioMode(scenario)
 		if mode == addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT:
 			return original(*args, **kwargs)
-		if mode == addonConfig.BoundaryFeedbackMode.SOUND_ONLY and replaceNativeBoundaryMessage:
+		if replaceNativeBoundaryMessage and (
+			mode == addonConfig.BoundaryFeedbackMode.SOUND_ONLY or addonConfig.modeReportsCurrentItem(mode)
+		):
 			result = self._callWithSuppressedFirstUiMessage(
 				original,
 				*args,
 				**kwargs,
 			)
-			self._playBoundarySound(direction)
-			return result
-		if addonConfig.modeReportsCurrentItem(mode) and replaceNativeBoundaryMessage:
-			result = self._callWithSuppressedFirstUiMessage(
-				original,
-				*args,
-				**kwargs,
-			)
-			if currentItemReporter is not None:
+			if addonConfig.modeReportsCurrentItem(mode) and currentItemReporter is not None:
 				currentItemReporter()
-			if addonConfig.modePlaysSound(mode):
-				self._playBoundarySound(direction)
-			return result
-		result = original(*args, **kwargs)
+		else:
+			result = original(*args, **kwargs)
 		if addonConfig.modePlaysSound(mode):
 			self._playBoundarySound(direction)
 		return result
@@ -908,7 +885,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				"script_movePastEndOfContainer",
 				movePastEndReplacement,
 			)
-			self._replaceExistingBrowseModeGestureMaps(movePastEndOriginal, movePastEndReplacement)
+			for treeInterceptor in self._getRunningBrowseModeTreeInterceptors():
+				self._replaceGestureMapFunction(treeInterceptor, movePastEndOriginal, movePastEndReplacement)
 			self._gestureMapReplacements.append(
 				(
 					self._getRunningBrowseModeTreeInterceptors,
@@ -944,7 +922,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			if hitBoundary:
 				self._playBoundarySoundForScenario(
 					addonConfig.SCENARIO_BROWSE_MODE_QUICK_NAV,
-					_directionFromBrowseDirection(direction),
+					direction,
 				)
 			return result
 
@@ -1025,14 +1003,6 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			for treeInterceptor in treeInterceptorHandler.runningTable
 			if isinstance(treeInterceptor, browseMode.BrowseModeTreeInterceptor)
 		)
-
-	def _replaceExistingBrowseModeGestureMaps(
-		self,
-		original: Callable[..., Any],
-		replacement: Callable[..., Any],
-	) -> None:
-		for treeInterceptor in self._getRunningBrowseModeTreeInterceptors():
-			self._replaceGestureMapFunction(treeInterceptor, original, replacement)
 
 	def _installCursorManagerHook(self) -> None:
 		original = cast(
@@ -1151,16 +1121,22 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			except Exception:
 				original(editableTextObj, gesture, unit)
 				return
+			focusBefore = api.getFocusObject()
 			beforeValueSnapshot = _getEditableValueSnapshot(editableTextObj)
 			original(editableTextObj, gesture, unit)
-			afterValueSnapshot = _getEditableValueSnapshot(editableTextObj)
+			if (
+				scriptHandler.isScriptWaiting()
+				or eventHandler.isPendingEvents("gainFocus")
+				or api.getFocusObject() != focusBefore
+			):
+				return
 			try:
 				after = editableTextObj.makeTextInfo(textInfos.POSITION_CARET).copy()
 			except Exception:
 				return
-			if _sameTextRange(before, after):
-				if beforeValueSnapshot != afterValueSnapshot:
-					return
+			if _sameTextRange(before, after) and beforeValueSnapshot == _getEditableValueSnapshot(
+				editableTextObj,
+			):
 				boundaryDirection = _directionFromTextBoundary(after, unit)
 				if boundaryDirection is not None:
 					self._playBoundarySoundForScenario(
@@ -1298,8 +1274,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			direction = _NEXT if nextParagraph else _PREVIOUS
 			mode = addonConfig.getScenarioMode(addonConfig.SCENARIO_PARAGRAPH_NAVIGATION)
 			reportsCurrentItem = addonConfig.modeReportsCurrentItem(mode)
+			reportInfo = (
+				self._getParagraphCurrentTextInfo(ti) if reportsCurrentItem and ti is not None else None
+			)
 			if reportsCurrentItem:
-				reportInfo = self._getParagraphCurrentTextInfo(ti)
 				passKey, moved = self._callWithSuppressedFirstUiMessage(
 					original,
 					nextParagraph,
@@ -1307,9 +1285,10 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					ti,
 				)
 			else:
-				reportInfo = None
 				passKey, moved = original(nextParagraph, speakNew, ti)
 			if not passKey and not moved:
+				if reportsCurrentItem and ti is None:
+					reportInfo = self._getParagraphCurrentTextInfo(None)
 				if reportsCurrentItem and (reportInfo is None or not currentItemReporter(reportInfo)):
 					# Translators: Reported when paragraph navigation cannot find another paragraph.
 					ui.message(_("No next paragraph") if nextParagraph else _("No previous paragraph"))

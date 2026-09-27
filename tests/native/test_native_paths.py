@@ -18,6 +18,8 @@ import api
 from baseObject import ScriptableObject
 import braille
 import config
+import controlTypes
+from documentNavigation import paragraphHelper
 import editableText
 import eventHandler
 import IAccessibleHandler
@@ -92,6 +94,11 @@ class WordProvider(BasicTextProvider):
 		if position == textInfos.POSITION_CARET:
 			info.collapse()  # Word's caret hides a non-collapsed selection.
 		return info
+
+
+class EditableProvider(editableText.EditableText, BasicTextProvider):
+	caretMovementDetectionUsesEvents = False
+	_caretMovementTimeoutMultiplier = 0
 
 
 def wordObject(cls, provider):
@@ -239,6 +246,50 @@ class NativePathTests(unittest.TestCase):
 				self.plugin._playBoundarySound.assert_not_called()
 				scriptHandler._numScriptsQueued = 0
 				self.pending.return_value = False
+
+	def test_editable_caret_wait_interruption_does_not_report(self):
+		with patch.object(scriptHandler, "_numScriptsQueued", 0):
+			for interruption in (None, "script", "pendingFocus", "focus"):
+				with self.subTest(interruption=interruption):
+					obj = EditableProvider(text="abc")
+					self.focus.return_value = obj
+					self.pending.return_value = False
+					scriptHandler._numScriptsQueued = 0
+					gesture = KeyboardInputGesture.fromName("upArrow")
+
+					def send():
+						if interruption == "script":
+							scriptHandler._numScriptsQueued = 1
+						elif interruption == "pendingFocus":
+							self.pending.return_value = True
+						elif interruption == "focus":
+							self.focus.return_value = None
+
+					gesture.send = Mock(side_effect=send)
+					self.plugin._playBoundarySound.reset_mock()
+					obj.script_caret_moveByLine(gesture)
+					if interruption is None:
+						self.plugin._playBoundarySound.assert_called_once()
+					else:
+						self.plugin._playBoundarySound.assert_not_called()
+
+	def test_paragraph_without_text_info_reads_current_item_only_at_boundary(self):
+		obj = BasicTextProvider(text="one\ntwo")
+		obj.role = controlTypes.Role.EDITABLETEXT
+		obj.makeTextInfo = Mock(wraps=obj.makeTextInfo)
+		self.focus.return_value = obj
+		self.section[self.conf.SCENARIO_PARAGRAPH_NAVIGATION] = 2
+
+		self.assertEqual(paragraphHelper.moveToSingleLineBreakParagraph(True, False), (False, True))
+		obj.makeTextInfo.assert_called_once_with(textInfos.POSITION_CARET)
+		self.speak.assert_not_called()
+		self.plugin._playBoundarySound.assert_not_called()
+
+		obj.makeTextInfo.reset_mock()
+		self.assertEqual(paragraphHelper.moveToSingleLineBreakParagraph(True, False), (False, False))
+		self.assertEqual(obj.makeTextInfo.call_count, 2)
+		self.speak.assert_called_once()
+		self.plugin._playBoundarySound.assert_called_once_with("next")
 
 	def test_native_wait_failure_restores_existing_override(self):
 		obj = wordObject(UIAWord, WordProvider())
