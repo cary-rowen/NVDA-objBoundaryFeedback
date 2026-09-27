@@ -21,6 +21,8 @@ import controlTypes
 import cursorManager
 from documentNavigation import paragraphHelper
 import editableText
+import eventHandler
+import IAccessibleHandler
 import globalVars
 import globalCommands
 import globalPluginHandler
@@ -28,6 +30,8 @@ import gui
 import inputCore
 from logHandler import log
 from NVDAObjects import NVDAObject
+from NVDAObjects.IAccessible.winword import WordDocument as LegacyWordDocument
+from NVDAObjects.window.winword import WordDocument
 import nvwave
 import review
 import scriptHandler
@@ -216,6 +220,64 @@ def _directionFromTextBoundary(info: textInfos.TextInfo, unit: _TextUnit) -> _Bo
 	return _NEXT if canMovePrevious else _PREVIOUS
 
 
+def _wordVerticalMovementDirection(
+	obj: editableText.EditableText,
+	gesture: inputCore.InputGesture,
+) -> _BoundaryDirection | None:
+	"""Restrict the keyboard workaround to Word's vertical caret navigation."""
+	if not isinstance(obj, WordDocument):
+		return None
+	for identifier in gesture.normalizedIdentifiers:
+		source, _, keys = identifier.partition(":")
+		if source != "kb" and not (source.startswith("kb(") and source.endswith(")")):
+			continue
+		keyNames = set(keys.split("+"))
+		if keyNames in ({"uparrow"}, {"control", "uparrow"}):
+			return _PREVIOUS
+		if keyNames in ({"downarrow"}, {"control", "downarrow"}):
+			return _NEXT
+	return None
+
+
+def _callWithCaretMoveObservation(
+	obj: editableText.EditableText,
+	original: _EditableTextCaretMovementScript,
+	gesture: inputCore.InputGesture,
+	unit: _TextUnit,
+) -> textInfos.TextInfo | None:
+	"""Observe NVDA's completed caret wait without sending or waiting a second time."""
+	methodName = "_hasCaretMoved"
+	originalWait = obj._hasCaretMoved
+	hadInstanceOverride = methodName in obj.__dict__
+	instanceOverride = obj.__dict__.get(methodName)
+	observedInfo = None
+
+	@functools.wraps(originalWait)
+	def observe(*args: Any, **kwargs: Any) -> Any:
+		nonlocal observedInfo
+		result = originalWait(*args, **kwargs)
+		# None means an interrupted wait or an unavailable caret, not a boundary.
+		# Copy before _caretScriptPostMovedHelper expands the returned range for
+		# speech. The boolean alone is insufficient: a caret event may be fired
+		# even when Word leaves the insertion point at exactly the same position.
+		try:
+			observedInfo = result[1].copy() if result[1] is not None else None
+		except Exception:
+			log.debugWarning("Unable to copy observed caret for boundary feedback", exc_info=True)
+			observedInfo = None
+		return result
+
+	setattr(obj, methodName, observe)
+	try:
+		original(obj, gesture, unit)
+	finally:
+		if hadInstanceOverride:
+			setattr(obj, methodName, instanceOverride)
+		else:
+			delattr(obj, methodName)
+	return observedInfo
+
+
 def _directionFromBrowseDirection(direction: _BrowseDirection) -> _BoundaryDirection:
 	if direction == "previous":
 		return _PREVIOUS
@@ -257,6 +319,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		self._installBrowseModeHooks()
 		self._installCursorManagerHook()
 		self._installEditableTextHook()
+		self._installLegacyWordParagraphHooks()
 		self._installParagraphHelperHooks()
 
 	def terminate(self) -> None:
@@ -1075,6 +1138,14 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 				== addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT
 			):
 				return original(editableTextObj, gesture, unit)
+			direction = _wordVerticalMovementDirection(editableTextObj, gesture)
+			if direction is not None:
+				self._reportWordCaretMovement(
+					editableTextObj,
+					direction,
+					lambda: _callWithCaretMoveObservation(editableTextObj, original, gesture, unit),
+				)
+				return
 			try:
 				before = editableTextObj.makeTextInfo(textInfos.POSITION_CARET).copy()
 			except Exception:
@@ -1098,6 +1169,109 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 					)
 
 		self._installMethodPatch(editableText.EditableText, "_caretMovementScriptHelper", replacement)
+
+	def _reportWordCaretMovement(
+		self,
+		obj: editableText.EditableText,
+		direction: _BoundaryDirection,
+		move: Callable[[], textInfos.TextInfo | None],
+	) -> None:
+		"""Report a failed Word movement after its native script has completed.
+
+		UIA/line navigation supplies the result of NVDA's existing caret wait;
+		legacy paragraph navigation supplies the caret after its synchronous COM
+		move. Neither path probes TextInfo.move or sends an extra gesture.
+		"""
+		if (
+			not addonConfig.modePlaysSound(
+				addonConfig.getScenarioMode(addonConfig.SCENARIO_EDITABLE_TEXT_CARET),
+			)
+			or scriptHandler.isScriptWaiting()
+			or eventHandler.isPendingEvents("gainFocus")
+		):
+			move()
+			return
+		focusBefore = api.getFocusObject()
+		try:
+			before = obj.makeTextInfo(textInfos.POSITION_SELECTION).copy()
+			hadSelection = not before.isCollapsed
+		except Exception:
+			move()
+			return
+		if hadSelection:
+			move()
+			return
+		beforeValue = _getEditableValueSnapshot(obj)
+		observedInfo = move()
+		if (
+			observedInfo is None
+			or scriptHandler.isScriptWaiting()
+			or eventHandler.isPendingEvents("gainFocus")
+			or api.getFocusObject() != focusBefore
+			or not _sameTextRange(before, observedInfo)
+		):
+			return
+		try:
+			after = obj.makeTextInfo(textInfos.POSITION_SELECTION).copy()
+		except Exception:
+			return
+		if _sameTextRange(before, after) and beforeValue == _getEditableValueSnapshot(obj):
+			self._playBoundarySoundForScenario(addonConfig.SCENARIO_EDITABLE_TEXT_CARET, direction)
+
+	def _getLiveLegacyWordDocuments(self) -> tuple[LegacyWordDocument, ...]:
+		# ScriptableObject caches functions in each instance's gesture map.
+		# Include the current objects as well as documents in NVDA's MSAA cache,
+		# both on installation and on termination (including new documents).
+		return tuple(
+			obj
+			for obj in (
+				api.getFocusObject(),
+				api.getNavigatorObject(),
+				*list(IAccessibleHandler.liveNVDAObjectTable.values()),
+			)
+			if isinstance(obj, LegacyWordDocument)
+		)
+
+	def _installLegacyWordParagraphHooks(self) -> None:
+		scripts: tuple[tuple[str, _BoundaryDirection], ...] = (
+			("script_previousParagraph", _PREVIOUS),
+			("script_nextParagraph", _NEXT),
+		)
+		for name, direction in scripts:
+			original = getattr(LegacyWordDocument, name, None)
+			if original is None or not _hasExpectedFunctionSignature(original, ("self", "gesture")):
+				continue
+			replacement = self._makeLegacyWordParagraphReplacement(original, direction)
+			self._installMethodPatch(LegacyWordDocument, name, replacement)
+			for obj in self._getLiveLegacyWordDocuments():
+				self._replaceGestureMapFunction(obj, original, replacement)
+			self._gestureMapReplacements.append((self._getLiveLegacyWordDocuments, original, replacement))
+
+	def _makeLegacyWordParagraphReplacement(
+		self,
+		original: Callable[..., None],
+		direction: _BoundaryDirection,
+	) -> Callable[..., None]:
+		@functools.wraps(original)
+		def replacement(obj: LegacyWordDocument, gesture: inputCore.InputGesture) -> None:
+			if (
+				addonConfig.getScenarioMode(addonConfig.SCENARIO_EDITABLE_TEXT_CARET)
+				== addonConfig.BoundaryFeedbackMode.NVDA_DEFAULT
+			):
+				return original(obj, gesture)
+
+			def move() -> textInfos.TextInfo | None:
+				# Keep NVDA's Range.move(wdParagraph, +/-1), updateCaret and
+				# _caretScriptPostMovedHelper intact, including say-all metadata.
+				original(obj, gesture)
+				try:
+					return obj.makeTextInfo(textInfos.POSITION_CARET).copy()
+				except Exception:
+					return None
+
+			self._reportWordCaretMovement(obj, direction, move)
+
+		return replacement
 
 	def _installParagraphHelperHooks(self) -> None:
 		for name, currentItemReporter in (

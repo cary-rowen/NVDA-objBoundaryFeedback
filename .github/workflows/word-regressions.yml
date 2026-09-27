@@ -1,0 +1,72 @@
+name: Word boundary regressions on NVDA
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      UV_PYTHON_PREFERENCE: managed
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select last tested NVDA version
+        id: version
+        shell: pwsh
+        run: |
+          $buildVars = Get-Content buildVars.py -Raw
+          if ($buildVars -notmatch 'addon_lastTestedNVDAVersion\s*=\s*"(?<version>\d+\.\d+\.\d+)"') {
+            throw 'Unable to read addon_lastTestedNVDAVersion from buildVars.py'
+          }
+          $releaseVersion = $matches.version -replace '\.0$', ''
+          "nvdaVersion=$($matches.version)" >> $env:GITHUB_OUTPUT
+          "nvdaRef=release-$releaseVersion" >> $env:GITHUB_OUTPUT
+      - name: Check out official NVDA ${{ steps.version.outputs.nvdaVersion }}
+        uses: actions/checkout@v7
+        with:
+          repository: nvaccess/nvda
+          ref: ${{ steps.version.outputs.nvdaRef }}
+          path: nvda
+          submodules: recursive
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.11.29'
+      - name: Ensure official C++ build components
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installPath = & $vswhere -latest -products '*' -property installationPath
+          $setup = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $vsConfig = Join-Path $PWD 'nvda\.vsconfig'
+          $installer = Start-Process -FilePath $setup -ArgumentList @(
+            'modify', '--installPath', "`"$installPath`"",
+            '--config', "`"$vsConfig`"", '--quiet', '--norestart'
+          ) -PassThru -Wait -WindowStyle Hidden
+          if ($installer.ExitCode -notin @(0, 3010)) { exit $installer.ExitCode }
+      - name: Build official NVDA source
+        working-directory: nvda
+        shell: pwsh
+        run: |
+          uv sync --frozen --group unit-tests
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\scons.bat source -j 4
+          exit $LASTEXITCODE
+      - name: Test native Word paths and browse-mode compatibility
+        shell: pwsh
+        run: |
+          .\nvda\.venv\Scripts\python.exe tests/run_nvda_tests.py --nvda-root nvda --output test-results/native
+          exit $LASTEXITCODE
+      - name: Preserve test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: word-boundary-regressions-${{ steps.version.outputs.nvdaVersion }}
+          path: |
+            test-results/

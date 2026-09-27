@@ -47,7 +47,7 @@ Improve sound file."""),
 	# Minimum NVDA version supported (e.g. "2019.3.0", minor version is optional)
 	addon_minimumNVDAVersion="2026.1.0",
 	# Last NVDA version supported/tested (e.g. "2024.4.0", ideally more recent than minimum version)
-	addon_lastTestedNVDAVersion="2026.1.0",
+	addon_lastTestedNVDAVersion="2026.2.0",
 	# Add-on update channel (default is None, denoting stable releases,
 	# and for development releases, use "dev".)
 	# Do not change unless you know what you are doing!
@@ -84,7 +84,8 @@ i18nSources: list[str] = [
 # Paths are relative to the addon directory, not to the root directory of your addon sources.
 # You can either list every file (using ""/") as a path separator,
 # or use glob expressions.
-excludedFiles: list[str] = []
+# Local regression tests import the plugin; never ship their cached bytecode.
+excludedFiles: list[str] = ["*.pyc", "*.pyo"]
 
 # Base language for the NVDA add-on
 # If your add-on is written in a language other than english, modify this variable.
