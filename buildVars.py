@@ -29,12 +29,13 @@ addon_info = AddonInfo(
 		"""Plays short tones when NVDA reaches common object, review cursor, browse mode, and text navigation boundaries.""",
 	),
 	# version
-	addon_version="0.2.1",
+	addon_version="0.2.2",
 	# Brief changelog for this version
 	# Translators: what's new content for the add-on version to be shown in the add-on store
-	addon_changelog=_("""### 0.2.1
+	addon_changelog=_("""### 0.2.2
 
-Improve sound file."""),
+* Fix boundary sounds when navigating up or down in Word.
+* Add a setting to choose between sound files and beeps for boundary feedback."""),
 	# Author(s)
 	addon_author="Cary-rowen <manchen_0528@outlook.com>",
 	# URL for the add-on documentation support
