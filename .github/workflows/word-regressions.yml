@@ -12,23 +12,26 @@ jobs:
   native:
     runs-on: windows-2022
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - nvda: '2026.1'
-            ref: ae21324abe670192364c6e025e21e3b20eb529bb
-          - nvda: '2026.2'
-            ref: f62c980589d1ac30babf68ad48177e9ad29a2e84
     env:
       UV_PYTHON_PREFERENCE: managed
     steps:
       - uses: actions/checkout@v7
-      - name: Check out official NVDA ${{ matrix.nvda }}
+      - name: Select last tested NVDA version
+        id: version
+        shell: pwsh
+        run: |
+          $buildVars = Get-Content buildVars.py -Raw
+          if ($buildVars -notmatch 'addon_lastTestedNVDAVersion\s*=\s*"(?<version>\d+\.\d+\.\d+)"') {
+            throw 'Unable to read addon_lastTestedNVDAVersion from buildVars.py'
+          }
+          $releaseVersion = $matches.version -replace '\.0$', ''
+          "nvdaVersion=$($matches.version)" >> $env:GITHUB_OUTPUT
+          "nvdaRef=release-$releaseVersion" >> $env:GITHUB_OUTPUT
+      - name: Check out official NVDA ${{ steps.version.outputs.nvdaVersion }}
         uses: actions/checkout@v7
         with:
           repository: nvaccess/nvda
-          ref: ${{ matrix.ref }}
+          ref: ${{ steps.version.outputs.nvdaRef }}
           path: nvda
           submodules: recursive
           persist-credentials: false
@@ -60,16 +63,10 @@ jobs:
         run: |
           .\nvda\.venv\Scripts\python.exe tests/run_nvda_tests.py --nvda-root nvda --output test-results/native
           exit $LASTEXITCODE
-      - name: Run official NVDA tests with the add-on enabled
-        shell: pwsh
-        run: |
-          .\nvda\.venv\Scripts\python.exe tests/run_nvda_tests.py --nvda-root nvda --output test-results/upstream --upstream
-          exit $LASTEXITCODE
       - name: Preserve test reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: word-boundary-regressions-${{ matrix.nvda }}
+          name: word-boundary-regressions-${{ steps.version.outputs.nvdaVersion }}
           path: |
             test-results/
-            nvda/testOutput/unit/

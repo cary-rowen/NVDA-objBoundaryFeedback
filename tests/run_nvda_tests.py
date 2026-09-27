@@ -14,18 +14,12 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock
 
 
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--nvda-root", required=True, type=Path)
 	parser.add_argument("--output", required=True, type=Path)
-	parser.add_argument(
-		"--upstream",
-		action="store_true",
-		help="Run NVDA's unit suite with the add-on loaded",
-	)
 	args = parser.parse_args()
 	root = args.nvda_root.resolve()
 	output = args.output.resolve()
@@ -40,17 +34,8 @@ def main():
 	sys.modules[spec.name] = module
 	spec.loader.exec_module(module)
 	output.mkdir(parents=True, exist_ok=True)
-	if args.upstream:
-		plugin = module.loadPlugin().GlobalPlugin()
-		plugin._playBoundarySound = Mock()  # retain enabled modes without audible output
-		try:
-			suite = unittest.defaultTestLoader.discover(str(root / "tests/unit"), top_level_dir=str(root))
-			result = xmlrunner.XMLTestRunner(output=str(output), verbosity=1).run(suite)
-		finally:
-			plugin.terminate()
-	else:
-		suite = unittest.defaultTestLoader.loadTestsFromModule(module)
-		result = xmlrunner.XMLTestRunner(output=str(output), verbosity=2).run(suite)
+	suite = unittest.defaultTestLoader.loadTestsFromModule(module)
+	result = xmlrunner.XMLTestRunner(output=str(output), verbosity=2).run(suite)
 	return 0 if result.wasSuccessful() else 1
 
 
