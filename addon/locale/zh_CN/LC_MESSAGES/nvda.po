@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: objBoundaryFeedback 0.2.0\n"
 "Report-Msgid-Bugs-To: 'nvda-translations@groups.io'\n"
-"POT-Creation-Date: 2026-05-17 00:50+0800\n"
+"POT-Creation-Date: 2026-09-27 11:07+0800\n"
 "PO-Revision-Date: 2026-05-17 00:50+0800\n"
 "Last-Translator: Cary-rowen <cary-rowen@users.noreply.github.com>\n"
 "Language-Team: Chinese (Simplified) <zh_CN@li.org>\n"
@@ -17,67 +17,77 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 #. Translators: Setting option to keep NVDA's normal boundary feedback unchanged.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:44
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:45
 msgid "NVDA default"
 msgstr "NVDA 默认"
 
 #. Translators: Setting option to report the current item instead of NVDA's boundary message.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:46
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:47
 msgid "Current item"
 msgstr "当前项目"
 
 #. Translators: Setting option to report the current item and play a boundary sound.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:48
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:49
 msgid "Current item and sound"
 msgstr "当前项目和提示音"
 
 #. Translators: Setting option to keep NVDA's boundary message and also play a sound.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:50
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:51
 msgid "NVDA default and sound"
 msgstr "NVDA 默认和提示音"
 
 #. Translators: Setting option to play only a sound at the boundary.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:52
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:53
 msgid "Sound only"
 msgstr "仅提示音"
 
+#. Translators: Boundary feedback sound output option.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:66
+msgid "Sound file"
+msgstr "声音文件"
+
+#. Translators: Boundary feedback sound output option.
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:68
+msgid "Beep"
+msgstr "蜂鸣"
+
 #. Translators: Setting label for boundary feedback when switching review modes.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:84
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:100
 msgid "Review mode boundaries"
 msgstr "查看模式边界"
 
 #. Translators: Setting label for boundary feedback during object navigation.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:91
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:107
 msgid "Object navigation boundaries"
 msgstr "对象导航边界"
 
 #. Translators: Setting label for boundary feedback when moving the review cursor.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:98
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:114
 msgid "Review cursor boundaries"
 msgstr "查看光标边界"
 
 #. Translators: Setting label for boundary feedback in browse mode quick navigation.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:105
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:121
 msgid "Browse mode quick navigation boundaries"
 msgstr "浏览模式单键导航边界"
 
 #. Translators: Setting label for boundary feedback when moving past the end of a browse mode container.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:112
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:128
 msgid "Browse mode container end boundary"
 msgstr "浏览模式容器末尾边界"
 
 #. Translators: Setting label for boundary feedback when browse mode virtual cursor movement fails.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:119
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:135
 msgid "Browse mode virtual cursor movement boundaries"
 msgstr "浏览模式虚拟光标移动边界"
 
 #. Translators: Setting label for boundary feedback during paragraph navigation.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:126
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:142
 msgid "Paragraph navigation boundaries"
 msgstr "段落导航边界"
 
 #. Translators: Setting label for boundary feedback when editable text caret movement fails.
-#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:133
+#: addon\globalPlugins\objBoundaryFeedback\addonConfig.py:149
 msgid "Editable text caret boundaries"
 msgstr "可编辑文本光标边界"
 
@@ -94,17 +104,22 @@ msgstr "对象边界反馈"
 msgid "Boundary feedback"
 msgstr "边界反馈"
 
+#. Translators: Setting label for the boundary feedback sound output.
+#: addon\globalPlugins\objBoundaryFeedback\settings.py:34
+msgid "Boundary sound output:"
+msgstr "边界声音输出："
+
 #. Translators: Reported when there is no current navigator object.
-#: addon\globalPlugins\objBoundaryFeedback\__init__.py:329
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:393
 msgid "No navigator object"
 msgstr "没有导航对象"
 
 #. Translators: Reported when paragraph navigation cannot find another paragraph.
-#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1141
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1310
 msgid "No next paragraph"
 msgstr "往下没有段落"
 
-#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1141
+#: addon\globalPlugins\objBoundaryFeedback\__init__.py:1310
 msgid "No previous paragraph"
 msgstr "往上没有段落"
 
@@ -118,17 +133,27 @@ msgstr "当 NVDA 到达常见对象、查看光标、浏览模式和文本导航
 #. Translators: what's new content for the add-on version to be shown in the add-on store
 #: buildVars.py:36
 msgid ""
-"### 0.2.0\n"
+"### 0.2.1\n"
 "\n"
-"- Treat editable value changes as movement to avoid false boundary sounds in "
-"numeric and editable controls.\n"
-"- Added Simplified Chinese translation for the interface and documentation.\n"
-"- Refined documentation wording for covered boundary scenarios.\n"
-"- Append the settings panel naturally to NVDA settings categories."
-msgstr ""
-"### 0.2.0\n"
+"Improve sound file."
+msgstr "### 0.2.1\n"
 "\n"
-"- 将可编辑控件的值变化视为移动，避免在数字和可编辑控件中误播放边界提示音。\n"
-"- 添加界面和文档的简体中文翻译。\n"
-"- 优化覆盖场景的文档表述。\n"
-"- 将设置面板自然追加到 NVDA 设置类别。"
+"Improve sound file."
+
+#~ msgid ""
+#~ "### 0.2.0\n"
+#~ "\n"
+#~ "- Treat editable value changes as movement to avoid false boundary sounds "
+#~ "in numeric and editable controls.\n"
+#~ "- Added Simplified Chinese translation for the interface and "
+#~ "documentation.\n"
+#~ "- Refined documentation wording for covered boundary scenarios.\n"
+#~ "- Append the settings panel naturally to NVDA settings categories."
+#~ msgstr ""
+#~ "### 0.2.0\n"
+#~ "\n"
+#~ "- 将可编辑控件的值变化视为移动，避免在数字和可编辑控件中误播放边界提示"
+#~ "音。\n"
+#~ "- 添加界面和文档的简体中文翻译。\n"
+#~ "- 优化覆盖场景的文档表述。\n"
+#~ "- 将设置面板自然追加到 NVDA 设置类别。"

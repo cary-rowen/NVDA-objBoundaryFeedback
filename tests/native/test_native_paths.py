@@ -18,6 +18,8 @@ import api
 from baseObject import ScriptableObject
 import braille
 import config
+import controlTypes
+from documentNavigation import paragraphHelper
 import editableText
 import eventHandler
 import IAccessibleHandler
@@ -94,6 +96,11 @@ class WordProvider(BasicTextProvider):
 		return info
 
 
+class EditableProvider(editableText.EditableText, BasicTextProvider):
+	caretMovementDetectionUsesEvents = False
+	_caretMovementTimeoutMultiplier = 0
+
+
 def wordObject(cls, provider):
 	# Use the actual class and native scripts, avoiding a live HWND/COM server
 	# for deterministic testing. Only application-facing data is substituted.
@@ -119,6 +126,7 @@ class NativePathTests(unittest.TestCase):
 		self.conf = self.module.addonConfig
 		self.section = cast(config.AggregatedSection, config.conf[self.conf.CONF_SECTION])
 		self.oldConfig = {setting.key: self.section[setting.key] for setting in self.conf.SCENARIO_SETTINGS}
+		self.oldConfig[self.conf.SOUND_OUTPUT] = self.section[self.conf.SOUND_OUTPUT]
 		self.addCleanup(self.restoreConfig)
 		self.section[self.conf.SCENARIO_EDITABLE_TEXT_CARET] = 3
 		self.section[self.conf.SCENARIO_BROWSE_MODE_VIRTUAL_CURSOR] = 3
@@ -240,6 +248,50 @@ class NativePathTests(unittest.TestCase):
 				scriptHandler._numScriptsQueued = 0
 				self.pending.return_value = False
 
+	def test_editable_caret_wait_interruption_does_not_report(self):
+		with patch.object(scriptHandler, "_numScriptsQueued", 0):
+			for interruption in (None, "script", "pendingFocus", "focus"):
+				with self.subTest(interruption=interruption):
+					obj = EditableProvider(text="abc")
+					self.focus.return_value = obj
+					self.pending.return_value = False
+					scriptHandler._numScriptsQueued = 0
+					gesture = KeyboardInputGesture.fromName("upArrow")
+
+					def send():
+						if interruption == "script":
+							scriptHandler._numScriptsQueued = 1
+						elif interruption == "pendingFocus":
+							self.pending.return_value = True
+						elif interruption == "focus":
+							self.focus.return_value = None
+
+					gesture.send = Mock(side_effect=send)
+					self.plugin._playBoundarySound.reset_mock()
+					obj.script_caret_moveByLine(gesture)
+					if interruption is None:
+						self.plugin._playBoundarySound.assert_called_once()
+					else:
+						self.plugin._playBoundarySound.assert_not_called()
+
+	def test_paragraph_without_text_info_reads_current_item_only_at_boundary(self):
+		obj = BasicTextProvider(text="one\ntwo")
+		obj.role = controlTypes.Role.EDITABLETEXT
+		obj.makeTextInfo = Mock(wraps=obj.makeTextInfo)
+		self.focus.return_value = obj
+		self.section[self.conf.SCENARIO_PARAGRAPH_NAVIGATION] = 2
+
+		self.assertEqual(paragraphHelper.moveToSingleLineBreakParagraph(True, False), (False, True))
+		obj.makeTextInfo.assert_called_once_with(textInfos.POSITION_CARET)
+		self.speak.assert_not_called()
+		self.plugin._playBoundarySound.assert_not_called()
+
+		obj.makeTextInfo.reset_mock()
+		self.assertEqual(paragraphHelper.moveToSingleLineBreakParagraph(True, False), (False, False))
+		self.assertEqual(obj.makeTextInfo.call_count, 2)
+		self.speak.assert_called_once()
+		self.plugin._playBoundarySound.assert_called_once_with("next")
+
 	def test_native_wait_failure_restores_existing_override(self):
 		obj = wordObject(UIAWord, WordProvider())
 		self.focus.return_value = obj
@@ -272,6 +324,29 @@ class NativePathTests(unittest.TestCase):
 			for key in ("downArrow", "control+downArrow"):
 				self.runKey(cls, key)
 				self.plugin._playBoundarySound.assert_not_called()
+
+	def test_boundary_sound_output_uses_selected_backend_and_direction_pitch(self):
+		playWaveFile = self.startPatch(self.module.nvwave, "playWaveFile")
+		beep = self.startPatch(self.module.tones, "beep")
+		playBoundarySound = self.module.GlobalPlugin._playBoundarySound
+
+		self.section[self.conf.SOUND_OUTPUT] = self.conf.BoundarySoundOutput.SOUND_FILE.value
+		playBoundarySound(self.plugin, self.module._PREVIOUS)
+		playWaveFile.assert_called_once()
+		beep.assert_not_called()
+
+		playWaveFile.reset_mock()
+		for direction, expected in (
+			(self.module._PREVIOUS, (400, 40)),
+			(self.module._NEXT, (200, 40)),
+			(self.module._GENERIC, (300, 40)),
+		):
+			with self.subTest(direction=direction):
+				self.section[self.conf.SOUND_OUTPUT] = self.conf.BoundarySoundOutput.BEEP.value
+				beep.reset_mock()
+				playBoundarySound(self.plugin, direction)
+				beep.assert_called_once_with(*expected)
+				playWaveFile.assert_not_called()
 
 	def test_browse_home_end_retain_feedback_when_line_probe_raises(self):
 		for method, selection, expected in (
